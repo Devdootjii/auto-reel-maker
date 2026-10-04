@@ -24,7 +24,13 @@ FONT_CHOICES = ["Poppins", "Anton", "Montserrat", "Bebas Neue", "Noto Sans Devan
 
 
 def ensure_fonts(font_dir):
-    """Download the caption fonts into font_dir (used via ffmpeg's fontsdir=)."""
+    """Download caption fonts AND write a fontconfig file.
+
+    Streamlit Cloud has no fontconfig config at all, so libass cannot find any
+    font unless we hand it one. We point FONTCONFIG_FILE at our own minimal
+    config that lists our fonts folder.
+    """
+    font_dir = os.path.abspath(font_dir)
     os.makedirs(font_dir, exist_ok=True)
     for name, url in FONT_URLS.items():
         dest = os.path.join(font_dir, name)
@@ -33,6 +39,21 @@ def ensure_fonts(font_dir):
                 subprocess.run(["curl", "-sL", "-o", dest, url], check=False, timeout=60)
             except Exception:
                 pass
+
+    root = os.path.dirname(font_dir)
+    cache = os.path.join(root, "fontcache")
+    os.makedirs(cache, exist_ok=True)
+    conf = os.path.join(root, "fonts.conf")
+    with open(conf, "w", encoding="utf-8") as f:
+        f.write(
+            '<?xml version="1.0"?>\n'
+            '<!DOCTYPE fontconfig SYSTEM "fonts.dtd">\n'
+            "<fontconfig>\n"
+            f"  <dir>{font_dir}</dir>\n"
+            f"  <cachedir>{cache}</cachedir>\n"
+            "</fontconfig>\n"
+        )
+    os.environ["FONTCONFIG_FILE"] = conf
     return font_dir
 
 
@@ -73,18 +94,27 @@ def extract_audio(video_path, ss=None, dur=None, out="audio.f32"):
 
 
 # -------------------------------------------------------- transcription ----
-def transcribe(audio, model_size="small", language=None, model=None):
-    """audio: float32 mono @16k. Returns (segments, info)."""
+def transcribe(audio, model_size="small", language=None, model=None, progress=None):
+    """audio: float32 mono @16k. Returns (segments, info).
+
+    progress: optional callable(fraction 0..1) fired as segments arrive.
+    """
     if model is None:
         from faster_whisper import WhisperModel
         model = WhisperModel(model_size, device="cpu", compute_type="int8")
     segs, info = model.transcribe(audio, language=language, vad_filter=True, word_timestamps=True)
+    total = (len(audio) / 16000.0) or 1.0
     out = []
     for s in segs:
         out.append({
             "start": s.start, "end": s.end, "text": s.text,
             "words": [(w.start, w.end, w.word) for w in (s.words or [])],
         })
+        if progress:
+            try:
+                progress(min(1.0, s.end / total))
+            except Exception:
+                pass
     return out, info
 
 
