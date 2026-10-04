@@ -1,40 +1,47 @@
-# Auto Reel Maker — web app setup (free)
+# Auto Reel Maker — web app (v3)
 
-A permanent link with a real UI, a **live phone-sized preview** of every option, progress bars, and **YouTube upload** built in. No Colab, no session timeouts.
+One page. Instant preview. Parallel rendering. Copy-ready descriptions.
 
-## Files (upload all three to GitHub)
-- `app.py` — the UI
-- `engine.py` — the rendering/transcription core
-- `requirements.txt` — dependencies
+## Files to upload to GitHub
+- `app.py`
+- `engine.py`
+- `requirements.txt`
+- `config.toml`  → **must live at `.streamlit/config.toml`** (see step 3)
 
 ## First-time setup
-
-### 1. GitHub
 1. github.com → **New repository** → name `auto-reel-maker` → **Public** → Create.
-2. **Add file → Upload files** → upload `app.py`, `engine.py`, `requirements.txt` → **Commit changes**.
+2. **Add file → Upload files** → upload `app.py`, `engine.py`, `requirements.txt` → Commit.
+3. **Add file → Create new file** → in the filename box type exactly:
+   `.streamlit/config.toml`
+   → paste the contents of the `config.toml` I gave you → Commit.
+   (This raises the upload limit above 200 MB and sets the theme.)
+4. **share.streamlit.io** → sign in with GitHub → **Create app → Deploy a public app from GitHub**
+   → repo `auto-reel-maker`, main file `app.py` → **Deploy**. First build ~5–10 min.
 
-### 2. Deploy (free)
-1. **share.streamlit.io** → sign in with GitHub.
-2. **Create app → Deploy a public app from GitHub**.
-3. Repository: `auto-reel-maker` · Main file path: **`app.py`** → **Deploy**.
-4. First build ~5–10 min. You get a permanent URL — bookmark it.
+## Updating (this is you)
+Re-upload the changed files to the same repo (Add file → Upload files → overwrite → Commit).
+Streamlit **auto-redeploys** in ~1–2 min. Refresh the page.
 
-## Updating an existing app (this is you)
-When I send new versions, just **re-upload the changed files to the same GitHub repo** (Add file → Upload files → overwrite → Commit). Streamlit **auto-redeploys** in a minute or two. Nothing else to do.
-
-## How to use
-- Open the link → upload video(s).
-- Left sidebar = all options. **Preview** tab renders a short sample instantly, so you can see each option's effect before committing.
-- Happy → **Generate** tab → **Generate now** → download the zip (videos + `post_details.txt`).
-- **YouTube** tab → one-time connect (upload `client_secret.json`, approve the link, paste the `code=` value) → upload. Login is saved and reused.
+## How it works now
+- **Left column** = all settings. **Right column** = live preview.
+- **Preview is instant** — it does NOT render a video. It draws one real frame of your video and
+  overlays the caption / overlay text / border / progress bar with CSS, so you see exactly where
+  everything lands and how it looks. Change any option → it updates immediately.
+- When it looks right → **Generate**. Videos render in parallel (see "Parallel jobs").
+- When done you get: **output.zip**, and each reel's **title / description / hashtags** in a box
+  with a **copy button** — paste straight into YouTube/Instagram. A `post_details.txt` is also
+  inside the zip if you'd rather keep the file.
 
 ## Notes
-- Host is **CPU-only** and ~2.7 GB RAM → keep **Whisper model = `small`** (default). `medium`/`large-v3` may crash.
-- A 1–1.5 hour video takes a while — you'll see a live progress bar + tips while it runs.
-- App **sleeps after ~12h of no visits**; opening the link wakes it in ~30–60s. Nothing is lost.
-- **Fonts are bundled** and a fontconfig file is written automatically, so captions (including Hindi) render even on this bare host.
+- Host is CPU-only, ~2.7 GB RAM → keep **Whisper model = `small`**.
+- **Upload limit:** default is 200 MB; the `config.toml` raises it. If a video is still too big,
+  compress it or trim it before uploading.
+- App **sleeps after ~12h idle**; opening the link wakes it in ~30–60s.
+- Fonts are bundled and a fontconfig file is written automatically, so captions (incl. Hindi) render.
 
 ## Troubleshooting
 - **Build failed** → Manage app → Logs, send me the error.
-- **Out of memory** → Whisper model `base`, one video at a time.
-- **Captions missing** → make sure the newest `engine.py` is uploaded (it writes the fontconfig file).
+- **Out of memory** → Whisper model `base`, fewer parallel jobs.
+- **Captions missing** → make sure the latest `engine.py` is uploaded.
+- **Upload still capped at 200 MB** → check that `.streamlit/config.toml` exists with
+  `[server]` `maxUploadSize = 2000`.

@@ -93,6 +93,17 @@ def extract_audio(video_path, ss=None, dur=None, out="audio.f32"):
     return np.fromfile(out, dtype=np.float32)
 
 
+def extract_frame(video_path, t, out="frame.jpg", width=None):
+    """Grab a single frame as an image (for the instant preview)."""
+    cmd = [ffmpeg_exe(), "-y", "-loglevel", "error", "-ss", str(t), "-i", video_path,
+           "-frames:v", "1"]
+    if width:
+        cmd += ["-vf", f"scale={width}:-2"]
+    cmd += ["-q:v", "4", out]
+    subprocess.run(cmd, check=True)
+    return out
+
+
 # -------------------------------------------------------- transcription ----
 def transcribe(audio, model_size="small", language=None, model=None, progress=None):
     """audio: float32 mono @16k. Returns (segments, info).
