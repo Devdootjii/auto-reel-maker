@@ -1,11 +1,11 @@
 """
-app.py — Auto Reel Maker (Streamlit)  ·  v4
+app.py — Auto Reel Maker (Streamlit)  ·  v5
 
-- Ribbon-style top tabs (Word jaisa). Tab pe click karo -> uske options left me khulte hain.
-- Live preview turant (koi video render nahi) — ek frame + CSS overlay.
-- No emojis. Panels ke peeche background. Animated gradient page background.
+- Ribbon tabs (Word jaisa). Tab pe click -> options left me.
+- Live preview turant (koi render nahi) aur chhota (phone-size, no scrolling).
+- Zyada customization options.
+- Settings automatically save + reload -> har baar dobara set nahi karna padta.
 - Parallel rendering, copy-ready descriptions, YouTube upload.
-- Defensive: purane engine.py pe bhi chalta hai.
 """
 import os
 import re
@@ -23,40 +23,28 @@ import engine
 
 st.set_page_config(page_title="Auto Reel Maker", page_icon=None, layout="wide")
 
-# ------------------------------------------------------------------ CSS ----
 st.markdown("""
 <style>
-  .stApp {
-    background: linear-gradient(135deg,#080910,#131024,#0b0d18,#0e1224);
-    background-size: 300% 300%;
-    animation: bgmove 24s ease infinite;
-  }
+  .stApp {background: linear-gradient(135deg,#080910,#131024,#0b0d18,#0e1224);
+          background-size: 300% 300%; animation: bgmove 24s ease infinite;}
   @keyframes bgmove {0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
-  .block-container {padding: 1.1rem 1.6rem 2rem 1.6rem; max-width: 1500px;}
+  .block-container {padding: .9rem 1.4rem 1.6rem 1.4rem; max-width: 1500px;}
   header[data-testid="stHeader"] {background: transparent;}
   section[data-testid="stSidebar"] {display:none;}
-
-  .topbar {display:flex; align-items:baseline; gap:14px;}
-  .brand {font-size:1.7rem; font-weight:800; letter-spacing:.2px;
+  .brand {font-size:1.5rem; font-weight:800;
           background:linear-gradient(90deg,#8b5cf6,#e879a6,#f0b429);
           -webkit-background-clip:text; -webkit-text-fill-color:transparent;}
-  .sub {color:#8b90a8; font-size:.86rem;}
-
+  .sub {color:#8b90a8; font-size:.8rem;}
   .panel {background:rgba(19,21,36,.86); border:1px solid #272b48; border-radius:16px;
-          padding:16px 18px; box-shadow:0 6px 24px rgba(0,0,0,.28); backdrop-filter:blur(6px);}
-  .panel h4 {margin:2px 0 10px 0; color:#e8eaf5; font-size:1.0rem;}
-  .label {color:#aab0c8; font-size:.8rem; margin-bottom:2px;}
-
-  .stButton>button, .stDownloadButton>button {
-      border-radius:11px; font-weight:600; border:1px solid #3a2f66;
-      background:linear-gradient(90deg,#7c4dff,#e0559b); color:#fff;}
+          padding:14px 16px; box-shadow:0 6px 24px rgba(0,0,0,.28); backdrop-filter:blur(6px);}
+  .panel h4 {margin:2px 0 8px 0; color:#e8eaf5; font-size:.98rem;}
+  .stButton>button, .stDownloadButton>button {border-radius:11px; font-weight:600;
+      border:1px solid #3a2f66; background:linear-gradient(90deg,#7c4dff,#e0559b); color:#fff;}
   .stButton>button:hover, .stDownloadButton>button:hover {color:#fff; opacity:.93;}
-
-  /* ribbon tabs */
   div[data-testid="stSegmentedControl"] {background:rgba(19,21,36,.86); border:1px solid #272b48;
-      border-radius:14px; padding:6px; }
-  div[data-testid="stSegmentedControl"] label {font-weight:600;}
-  .ribbon-note {color:#7b8199; font-size:.78rem; margin-top:4px;}
+      border-radius:14px; padding:5px;}
+  .ribbon-note {color:#7b8199; font-size:.76rem; margin-top:2px;}
+  label, .stMarkdown p {font-size:.84rem;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -64,7 +52,52 @@ WORK = "work"
 os.makedirs(WORK, exist_ok=True)
 FONTS = engine.ensure_fonts(os.path.join(WORK, "fonts"))
 
-TABS = ["Home", "Captions", "Animation", "Framing", "Audio", "Clips", "YouTube"]
+TABS = ["Home", "Captions", "Animation", "Framing", "Overlay", "Audio", "Clips", "YouTube"]
+
+# keys we persist between visits
+PERSIST = ["mode", "language", "model_size", "FONT", "caption_style", "caption_anim", "caption_box",
+           "caption_box_opacity", "caption_size", "caption_color", "highlight_color", "highlight_mode",
+           "caption_uppercase", "caption_max_words", "caption_pos", "caption_margin", "caption_outline",
+           "slow_zoom", "fade", "progress_bar", "progress_color", "frame_mode", "bg_color", "blur_strength",
+           "crop_zoom", "crop_x", "crop_y", "border", "border_color", "border_width",
+           "overlay_text", "overlay_pos", "overlay_color", "overlay_size",
+           "original_audio", "original_volume", "music_volume", "min_dur", "max_dur", "max_clips", "workers"]
+
+DEFAULTS = dict(mode="reels", language="auto", model_size="small", FONT="auto", caption_style="karaoke",
+                caption_anim="pop", caption_box=False, caption_box_opacity=0.6, caption_size=62,
+                caption_color="#FFFFFF", highlight_color="#FFD400", highlight_mode="color",
+                caption_uppercase=False, caption_max_words=4, caption_pos="bottom", caption_margin=230,
+                caption_outline=4, slow_zoom=False, fade=False, progress_bar=True, progress_color="#FFD400",
+                frame_mode="fit_blur", bg_color="#101020", blur_strength=30, crop_zoom=1.0, crop_x=0.5,
+                crop_y=0.5, border=True, border_color="#FFD400", border_width=14,
+                overlay_text="", overlay_pos="top", overlay_color="#FFD400", overlay_size=54,
+                original_audio="keep", original_volume=1.0, music_volume=0.15, min_dur=20, max_dur=60,
+                max_clips=0, workers=2)
+
+SETTINGS_FILE = os.path.join(WORK, "settings.json")
+
+
+def load_saved():
+    if os.path.exists(SETTINGS_FILE):
+        try:
+            return json.load(open(SETTINGS_FILE))
+        except Exception:
+            return {}
+    return {}
+
+
+def persist():
+    data = {k: st.session_state.get(k) for k in PERSIST if k in st.session_state}
+    try:
+        json.dump(data, open(SETTINGS_FILE, "w"))
+    except Exception:
+        pass
+
+
+# seed session_state from the saved file so choices survive between visits
+_saved = load_saved()
+for _k in PERSIST:
+    st.session_state.setdefault(_k, _saved.get(_k, DEFAULTS[_k]))
 
 
 # -------------------------------------------------------------- helpers ----
@@ -83,8 +116,7 @@ def get_duration(path):
     return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3)) if m else 0.0
 
 
-def grab_frame(video_path, t, out, width=420):
-    """Works whether or not engine has the newer extract_frame."""
+def grab_frame(video_path, t, out, width=360):
     fn = getattr(engine, "extract_frame", None)
     if callable(fn):
         try:
@@ -99,7 +131,6 @@ def grab_frame(video_path, t, out, width=420):
 
 
 def do_transcribe(audio, model_size, language, progress=None):
-    """Works with or without the progress kwarg."""
     try:
         return engine.transcribe(audio, model_size, language, progress=progress)
     except TypeError:
@@ -124,7 +155,7 @@ def font_face(font_name):
         return ""
     p = os.path.join(FONTS, fname)
     if not os.path.exists(p) or os.path.getsize(p) > 300_000:
-        return ""   # heavy font -> system fallback keeps the preview instant
+        return ""
     b64 = base64.b64encode(open(p, "rb").read()).decode()
     return "@font-face{font-family:'PV';src:url(data:font/ttf;base64," + b64 + ");font-weight:700;}"
 
@@ -133,13 +164,15 @@ SAMPLE = {"hi": (["आज", "हम", "बात", "करेंगे", "क्
           "default": (["Here", "is", "how", "it", "works", "for", "you"], 2)}
 
 
-def preview_html(frame, S, lang, box_w=300):
+def preview_html(frame, S, lang, box_w=228):
     box_h = int(box_w * 16 / 9)
     words, hl = SAMPLE["hi"] if lang in ("hi", "mr", "ne") else SAMPLE["default"]
+    if S.get("caption_uppercase"):
+        words = [w.upper() for w in words]
 
     if S["frame_mode"] == "fit_blur":
         bg = ("background-image:url('" + frame + "');background-size:cover;background-position:center;"
-              "filter:blur(16px) brightness(.72);")
+              "filter:blur(" + str(int(S.get("blur_strength", 30) / 2.6)) + "px) brightness(.72);")
         fg = ("background-image:url('" + frame + "');background-size:contain;background-position:center;"
               "background-repeat:no-repeat;")
     elif S["frame_mode"] == "fit_color":
@@ -150,43 +183,50 @@ def preview_html(frame, S, lang, box_w=300):
         bg = "background:#000;"
         fg = "background-image:url('" + frame + "');background-size:cover;background-position:center;"
 
-    fs = max(9, round(S["caption_size"] * box_w / 1080 * 2.1))
-    outline = ("text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000,"
-               "0 0 6px rgba(0,0,0,.85);")
-    cap_box = "background:rgba(0,0,0,.62);padding:3px 10px;border-radius:8px;" if S["caption_box"] else ""
+    fs = max(8, round(S["caption_size"] * box_w / 1080 * 2.1))
+    ow = max(1, round(S.get("caption_outline", 4) / 2))
+    outline = ("text-shadow:-" + str(ow) + "px 0 #000," + str(ow) + "px 0 #000,0 -" + str(ow) + "px #000,"
+               "0 " + str(ow) + "px #000;")
+    op = float(S.get("caption_box_opacity", 0.6))
+    cap_box = ("background:rgba(0,0,0," + str(op) + ");padding:3px 9px;border-radius:7px;"
+               if S["caption_box"] else "")
 
     cap = ""
     if S["caption_style"] != "none":
         if S["caption_style"] == "karaoke":
-            body = " ".join(("<span style='color:" + S["highlight_color"] + "'>" + w + "</span>")
-                            if i == hl else w for i, w in enumerate(words))
+            if S.get("highlight_mode") == "box":
+                body = " ".join(("<span style='background:" + S["highlight_color"] +
+                                 ";color:#000;padding:0 3px;border-radius:4px;'>" + w + "</span>")
+                                if i == hl else w for i, w in enumerate(words))
+            else:
+                body = " ".join(("<span style='color:" + S["highlight_color"] + "'>" + w + "</span>")
+                                if i == hl else w for i, w in enumerate(words))
         else:
             body = " ".join(words)
-        cap = ("<div style='position:absolute;left:7%;right:7%;bottom:11%;text-align:center;"
+        vpos = ("bottom:" + str(round(S.get("caption_margin", 230) * box_h / 1920)) + "%;"
+                if S.get("caption_pos", "bottom") != "middle" else "top:47%;")
+        cap = ("<div style='position:absolute;left:6%;right:6%;" + vpos + "text-align:center;"
                "font-family:\"PV\",system-ui,sans-serif;font-weight:700;font-size:" + str(fs) + "px;"
                "color:" + S["caption_color"] + ";" + outline + "'>"
                "<span style='" + cap_box + "'>" + body + "</span></div>")
 
     ov = ""
     if S["overlay_text"].strip():
-        pos = "top:9%;" if S["overlay_pos"] == "top" else "bottom:24%;"
+        pos = "top:8%;" if S["overlay_pos"] == "top" else "bottom:22%;"
         ov = ("<div style='position:absolute;left:6%;right:6%;" + pos + "text-align:center;"
-              "font-family:\"PV\",system-ui,sans-serif;font-weight:700;font-size:" + str(max(8, round(fs*0.8))) + "px;"
+              "font-family:\"PV\",system-ui,sans-serif;font-weight:700;font-size:"
+              + str(max(7, round(S.get("overlay_size", 54) * box_w / 1080 * 2.1))) + "px;"
               "color:" + S["overlay_color"] + ";" + outline + "'>" + S["overlay_text"] + "</div>")
 
-    prog = ("<div style='position:absolute;top:0;left:0;height:6px;width:42%;background:"
-            + S["border_color"] + ";'></div>") if S["progress_bar"] else ""
+    prog = ("<div style='position:absolute;top:0;left:0;height:5px;width:42%;background:"
+            + S.get("progress_color", S["border_color"]) + ";'></div>") if S["progress_bar"] else ""
     bw = S["border_width"] if S["border"] else 0
-
     frame_css = ("position:relative;width:" + str(box_w) + "px;height:" + str(box_h) + "px;margin:0 auto;"
-                 "border-radius:18px;overflow:hidden;border:" + str(bw) + "px solid " + S["border_color"] + ";"
-                 "box-shadow:0 14px 44px rgba(0,0,0,.55);")
-
-    return ("<style>" + font_face(S["caption_font"]) + "</style>"
-            "<div style='" + frame_css + "'>"
+                 "border-radius:14px;overflow:hidden;border:" + str(bw) + "px solid " + S["border_color"] + ";"
+                 "box-shadow:0 12px 34px rgba(0,0,0,.55);")
+    return ("<style>" + font_face(S["caption_font"]) + "</style><div style='" + frame_css + "'>"
             "<div style='position:absolute;inset:0;" + bg + "'></div>"
-            "<div style='position:absolute;inset:0;" + fg + "'></div>"
-            + prog + ov + cap + "</div>")
+            "<div style='position:absolute;inset:0;" + fg + "'></div>" + prog + ov + cap + "</div>")
 
 
 @st.cache_data(show_spinner=False)
@@ -211,29 +251,28 @@ def full_transcript(video_path, model_size, language, progress_cb=None):
 
 
 # ----------------------------------------------------------------- header --
-st.markdown('<div class="topbar"><span class="brand">Auto Reel Maker</span>'
-            '<span class="sub">Option chuno, turant preview dekho, phir process karo.</span></div>',
-            unsafe_allow_html=True)
+st.markdown('<div class="brand">Auto Reel Maker</div>'
+            '<div class="sub">Tab chuno, options set karo, turant preview dekho. '
+            'Settings apne aap save rehti hain.</div>', unsafe_allow_html=True)
 
 uploads = st.file_uploader("Upload video(s)", type=["mp4", "mov", "mkv", "webm", "avi"],
                            accept_multiple_files=True, label_visibility="collapsed")
 if not uploads:
     st.markdown('<div class="panel">Shuru karne ke liye apni video upload karo.<br>'
-                '<span class="ribbon-note">Upload hote waqt: preview turant banega, koi video '
-                'process nahi hoti jab tak tum Generate na dabao.</span></div>', unsafe_allow_html=True)
+                '<span class="ribbon-note">Preview turant banega — koi video process nahi hoti '
+                'jab tak Generate na dabao.</span></div>', unsafe_allow_html=True)
     st.stop()
 
 paths = [save_upload(u) for u in uploads]
 primary = paths[0]
 dur_total = get_duration(primary)
 
-# -------------------------------------------------------------- ribbon -----
 try:
     tab = st.segmented_control("Section", TABS, default="Home", label_visibility="collapsed") or "Home"
 except Exception:
     tab = st.radio("Section", TABS, horizontal=True, label_visibility="collapsed")
 
-col_set, col_prev = st.columns([1, 1.15], gap="large")
+col_set, col_prev = st.columns([1, 1.0], gap="large")
 
 # ------------------------------------------------------------- settings ----
 with col_set:
@@ -241,79 +280,87 @@ with col_set:
     st.markdown(f"<h4>{tab}</h4>", unsafe_allow_html=True)
 
     if tab == "Home":
-        st.selectbox("Mode", ["reels", "full_video", "transcribe_only"], 0, key="mode")
-        st.selectbox("Language", ["auto", "hi", "en", "bn", "ta", "te", "mr", "gu", "kn", "ml", "pa"], 0, key="language")
-        st.selectbox("Whisper model", ["tiny", "base", "small", "medium"], 2, key="model_size",
+        st.selectbox("Mode", ["reels", "full_video", "transcribe_only"], key="mode")
+        st.selectbox("Language", ["auto", "hi", "en", "bn", "ta", "te", "mr", "gu", "kn", "ml", "pa"], key="language")
+        st.selectbox("Whisper model", ["tiny", "base", "small", "medium"], key="model_size",
                      help="CPU pe 'small' best.")
-        st.selectbox("Caption font", ["auto"] + engine.FONT_CHOICES, 0, key="FONT")
-        st.markdown('<div class="ribbon-note">reels = clips, full_video = poori video pe captions, '
-                    'transcribe_only = sirf text.</div>', unsafe_allow_html=True)
+        st.selectbox("Caption font", ["auto"] + engine.FONT_CHOICES, key="FONT")
+        c1, c2 = st.columns(2)
+        if c1.button("Reset settings", use_container_width=True):
+            for k, v in DEFAULTS.items():
+                st.session_state[k] = v
+            persist(); st.rerun()
+        c2.markdown('<span class="ribbon-note">Settings auto-save hoti hain.</span>', unsafe_allow_html=True)
 
     elif tab == "Captions":
-        st.selectbox("Caption style", ["karaoke", "plain", "none"], 0, key="caption_style")
-        st.checkbox("Box behind text", False, key="caption_box")
-        st.slider("Caption size", 30, 100, 62, key="caption_size")
-        st.color_picker("Text colour", "#FFFFFF", key="caption_color")
-        st.color_picker("Karaoke highlight", "#FFD400", key="highlight_color")
+        st.selectbox("Caption style", ["karaoke", "plain", "none"], key="caption_style")
+        c1, c2 = st.columns(2)
+        c1.checkbox("Box behind text", key="caption_box")
+        c2.selectbox("Position", ["bottom", "middle"], key="caption_pos")
+        c1.slider("Caption size", 30, 110, key="caption_size")
+        c2.slider("Words per line", 1, 8, key="caption_max_words")
+        c1.color_picker("Text colour", key="caption_color")
+        c2.color_picker("Highlight colour", key="highlight_color")
+        c1.selectbox("Highlight mode", ["color", "box"], key="highlight_mode")
+        c2.checkbox("UPPERCASE text", key="caption_uppercase")
+        c1.slider("Outline width", 0, 10, key="caption_outline")
+        c2.slider("Bottom margin", 60, 500, key="caption_margin")
+        st.slider("Box opacity", 0.0, 1.0, key="caption_box_opacity", step=0.05)
 
     elif tab == "Animation":
-        st.selectbox("Caption animation", ["pop", "fade", "none"], 0, key="caption_anim")
-        st.checkbox("Slow zoom on video", False, key="slow_zoom")
-        st.checkbox("Progress bar on reel", True, key="progress_bar")
-        st.markdown('<div class="ribbon-note">Pop = chhote se bade, Fade = halka aana.</div>',
-                    unsafe_allow_html=True)
+        st.selectbox("Caption animation", ["pop", "fade", "none"], key="caption_anim")
+        c1, c2 = st.columns(2)
+        c1.checkbox("Slow zoom on video", key="slow_zoom")
+        c2.checkbox("Fade in / out", key="fade")
+        c1.checkbox("Progress bar", key="progress_bar")
+        c2.color_picker("Progress bar colour", key="progress_color")
 
     elif tab == "Framing":
-        st.selectbox("Frame mode", ["fit_blur", "fit_color", "crop"], 0, key="frame_mode")
-        st.color_picker("Background colour", "#101020", key="bg_color")
-        st.slider("Crop zoom", 1.0, 3.0, 1.0, 0.1, key="crop_zoom")
-        st.slider("Crop X", 0.0, 1.0, 0.5, 0.05, key="crop_x")
-        st.slider("Crop Y", 0.0, 1.0, 0.5, 0.05, key="crop_y")
-        st.checkbox("Border", True, key="border")
-        st.color_picker("Border colour", "#FFD400", key="border_color")
-        st.slider("Border width", 0, 40, 14, key="border_width")
+        st.selectbox("Frame mode", ["fit_blur", "fit_color", "crop"], key="frame_mode")
+        c1, c2 = st.columns(2)
+        c1.color_picker("Background colour", key="bg_color")
+        c2.slider("Blur strength", 0, 80, key="blur_strength")
+        c1.slider("Crop zoom", 1.0, 3.0, key="crop_zoom", step=0.1)
+        c2.slider("Crop X", 0.0, 1.0, key="crop_x", step=0.05)
+        st.slider("Crop Y", 0.0, 1.0, key="crop_y", step=0.05)
+        c1, c2 = st.columns(2)
+        c1.checkbox("Border", key="border")
+        c2.color_picker("Border colour", key="border_color")
+        st.slider("Border width", 0, 40, key="border_width")
+
+    elif tab == "Overlay":
+        st.text_input("Overlay text", key="overlay_text", placeholder="Follow for more")
+        c1, c2 = st.columns(2)
+        c1.selectbox("Position", ["top", "bottom"], key="overlay_pos")
+        c2.color_picker("Colour", key="overlay_color")
+        st.slider("Overlay size", 20, 110, key="overlay_size")
 
     elif tab == "Audio":
-        st.selectbox("Original audio", ["keep", "mute"], 0, key="original_audio")
+        st.selectbox("Original audio", ["keep", "mute"], key="original_audio")
+        st.slider("Original volume", 0.0, 2.0, key="original_volume", step=0.05)
         st.file_uploader("Background music (optional)", type=["mp3", "m4a", "wav", "aac"], key="music_file")
-        st.slider("Music volume", 0.0, 1.0, 0.15, 0.05, key="music_volume")
-        st.text_input("Overlay text", "", placeholder="Follow for more", key="overlay_text")
-        st.selectbox("Overlay position", ["top", "bottom"], 0, key="overlay_pos")
-        st.color_picker("Overlay colour", "#FFD400", key="overlay_color")
+        st.slider("Music volume", 0.0, 1.0, key="music_volume", step=0.05)
 
     elif tab == "Clips":
-        st.number_input("Min clip (seconds)", 5, 300, 20, key="min_dur")
-        st.number_input("Max clip (seconds)", 10, 600, 60, key="max_dur")
-        st.number_input("Parallel jobs", 1, 8, 2, key="workers",
-                        help="Ek saath kitne clips render hon.")
+        c1, c2 = st.columns(2)
+        c1.number_input("Min clip (seconds)", 5, 300, key="min_dur")
+        c2.number_input("Max clip (seconds)", 10, 600, key="max_dur")
+        c1.number_input("Max clips (0 = all)", 0, 100, key="max_clips")
+        c2.number_input("Parallel jobs", 1, 8, key="workers")
 
     elif tab == "YouTube":
-        st.markdown('<div class="ribbon-note">Pehle Generate karo, phir yahan se upload.</div>',
+        st.markdown('<span class="ribbon-note">Pehle Generate karo, phir yahan se upload.</span>',
                     unsafe_allow_html=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
 
+persist()
 
-def G(k, d):
-    return st.session_state.get(k, d)
+G = lambda k: st.session_state.get(k, DEFAULTS[k])
+caption_font = "Noto Sans Devanagari" if G("language") in {"hi", "mr", "ne"} else \
+               ("Poppins" if G("FONT") == "auto" else G("FONT"))
 
-mode = G("mode", "reels"); language = G("language", "auto"); model_size = G("model_size", "small")
-FONT = G("FONT", "auto")
-caption_style = G("caption_style", "karaoke"); caption_box = G("caption_box", False)
-caption_size = G("caption_size", 62); caption_color = G("caption_color", "#FFFFFF")
-highlight_color = G("highlight_color", "#FFD400"); caption_anim = G("caption_anim", "pop")
-slow_zoom = G("slow_zoom", False); progress_bar = G("progress_bar", True)
-frame_mode = G("frame_mode", "fit_blur"); bg_color = G("bg_color", "#101020")
-crop_zoom = G("crop_zoom", 1.0); crop_x = G("crop_x", 0.5); crop_y = G("crop_y", 0.5)
-border = G("border", True); border_color = G("border_color", "#FFD400"); border_width = G("border_width", 14)
-original_audio = G("original_audio", "keep"); music_volume = G("music_volume", 0.15)
-overlay_text = G("overlay_text", ""); overlay_pos = G("overlay_pos", "top"); overlay_color = G("overlay_color", "#FFD400")
-min_dur = G("min_dur", 20); max_dur = G("max_dur", 60); workers = G("workers", 2)
 music_file = st.session_state.get("music_file")
-
-caption_font = "Noto Sans Devanagari" if language in {"hi", "mr", "ne"} else ("Poppins" if FONT == "auto" else FONT)
-
-# keep the music file even after switching tabs
 music_path = st.session_state.get("music_path_saved", "")
 if music_file is not None:
     mp = os.path.join(WORK, "music_" + music_file.name)
@@ -322,22 +369,20 @@ if music_file is not None:
     st.session_state["music_path_saved"] = mp
     music_path = mp
 
-S = dict(mode=mode, caption_font=caption_font, caption_style=caption_style, caption_anim=caption_anim,
-         caption_box=caption_box, caption_size=caption_size, caption_color=caption_color,
-         highlight_color=highlight_color, frame_mode=frame_mode, bg_color=bg_color, crop_zoom=crop_zoom,
-         crop_x=crop_x, crop_y=crop_y, border=border, border_color=border_color, border_width=border_width,
-         progress_bar=progress_bar, slow_zoom=slow_zoom, overlay_text=overlay_text, overlay_pos=overlay_pos,
-         overlay_color=overlay_color, min_dur=int(min_dur), max_dur=int(max_dur), music_path=music_path,
-         music_volume=music_volume, original_audio=original_audio)
+S = {k: G(k) for k in DEFAULTS}
+S["caption_font"] = caption_font
+S["music_path"] = music_path
+S["min_dur"] = int(S["min_dur"]); S["max_dur"] = int(S["max_dur"])
+S["max_clips"] = int(S["max_clips"]); S["workers"] = int(S["workers"])
 
 # ---------------------------------------------------------------- preview --
 with col_prev:
-    st.markdown('<div class="panel"><h4>Live preview</h4>', unsafe_allow_html=True)
-    st.markdown('<div class="ribbon-note">Turant update hota hai — video process nahi hoti. '
-                'Final output bilkul aisa hi dikhega.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="panel"><h4>Live preview</h4>'
+                '<span class="ribbon-note">Turant — video process nahi hoti.</span>',
+                unsafe_allow_html=True)
     t = min(10, max(0, dur_total / 2))
     try:
-        st.markdown(preview_html(frame_uri(primary, t), S, language), unsafe_allow_html=True)
+        st.markdown(preview_html(frame_uri(primary, t), S, G("language")), unsafe_allow_html=True)
     except Exception as e:
         st.warning(f"Preview nahi bana: {e}")
     st.markdown("</div>", unsafe_allow_html=True)
@@ -345,7 +390,6 @@ with col_prev:
     st.markdown('<div class="panel"><h4>Process</h4>', unsafe_allow_html=True)
     if st.button("Generate", type="primary", use_container_width=True):
         bar = st.progress(0.0, text="Shuru…")
-        tip = st.empty()
         try:
             trans = {}
             for i, vp in enumerate(paths):
@@ -354,7 +398,7 @@ with col_prev:
                 def cb(frac, _s=stem, _i=i):
                     bar.progress((_i + frac) / len(paths) * 0.6, text=f"Transcribing {_s}… {int(frac*100)}%")
 
-                trans[vp] = full_transcript(vp, model_size, None if language == "auto" else language, cb)
+                trans[vp] = full_transcript(vp, G("model_size"), None if G("language") == "auto" else G("language"), cb)
                 os.makedirs("transcripts", exist_ok=True)
                 with open(f"transcripts/{stem}.txt", "w", encoding="utf-8") as f:
                     for s in trans[vp]:
@@ -364,9 +408,9 @@ with col_prev:
             for vp in paths:
                 stem = os.path.splitext(os.path.basename(vp))[0]
                 segs = trans[vp]
-                if mode == "transcribe_only":
+                if S["mode"] == "transcribe_only":
                     continue
-                if mode == "full_video":
+                if S["mode"] == "full_video":
                     os.makedirs("captioned", exist_ok=True)
                     end = max(x["end"] for x in segs) if segs else 0
                     out = f"captioned/{stem}_captioned.mp4"
@@ -375,7 +419,10 @@ with col_prev:
                     details.append({"file": os.path.basename(out), "title": txt[:90] or stem,
                                     "desc": txt, "tags": engine.hashtags(txt)})
                 else:
-                    clips = engine.find_clips(segs, S["min_dur"], S["max_dur"])
+                    try:
+                        clips = engine.find_clips(segs, S["min_dur"], S["max_dur"], max_clips=S["max_clips"])
+                    except TypeError:
+                        clips = engine.find_clips(segs, S["min_dur"], S["max_dur"])
                     os.makedirs(f"reels/{stem}", exist_ok=True)
                     for i, (s, e) in enumerate(clips):
                         out = f"reels/{stem}/reel_{i+1:02d}.mp4"
@@ -388,7 +435,7 @@ with col_prev:
             results = []
             if tasks:
                 done = 0
-                with concurrent.futures.ThreadPoolExecutor(max_workers=int(workers)) as ex:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=int(S["workers"])) as ex:
                     futs = {ex.submit(engine.render_segment, vp, sg, s, e, o, S, FONTS): o
                             for (vp, sg, s, e, o) in tasks}
                     for f in concurrent.futures.as_completed(futs):
@@ -455,7 +502,7 @@ if tab == "YouTube":
         creds = st.session_state["yt_creds"]
         if creds:
             st.success("Connected (saved login reuse ho raha hai).")
-            privacy = st.selectbox("Privacy", ["private", "unlisted", "public"], 0)
+            privacy = st.selectbox("Privacy", ["private", "unlisted", "public"])
             if st.button("Upload generated videos"):
                 try:
                     from googleapiclient.discovery import build

@@ -130,7 +130,7 @@ def transcribe(audio, model_size="small", language=None, model=None, progress=No
 
 
 # --------------------------------------------------------------- clips -----
-def find_clips(segments, min_dur=20, max_dur=60, k=2, smooth=2, cutoff=0.5):
+def find_clips(segments, min_dur=20, max_dur=60, k=2, smooth=2, cutoff=0.5, max_clips=0):
     from sklearn.feature_extraction.text import TfidfVectorizer
     segs = [s for s in segments if s["text"].strip()]
     if len(segs) < 4:
@@ -169,7 +169,8 @@ def find_clips(segments, min_dur=20, max_dur=60, k=2, smooth=2, cutoff=0.5):
         while (e - s) > max_dur:
             final.append((s, s + max_dur)); s += max_dur
         final.append((s, e))
-    return [(round(s, 1), round(e, 1)) for s, e in final if (e - s) >= min_dur]
+    out2 = [(round(s, 1), round(e, 1)) for s, e in final if (e - s) >= min_dur]
+    return out2[:max_clips] if max_clips else out2
 
 
 def hashtags(text, n=6):
@@ -211,17 +212,24 @@ ANIMS = {"pop": "{\\fscx80\\fscy80\\t(0,160,\\fscx100\\fscy100)}",
 
 
 def ass_head(W, H, S):
-    fs = max(16, round(S["caption_size"] * H / 1920))
-    ovfs = max(14, round(54 * H / 1920))
-    mcapv = round(230 * H / 1920)
+    fs = max(16, round(S.get("caption_size", 62) * H / 1920))
+    ovfs = max(14, round(S.get("overlay_size", 54) * H / 1920))
+    pos = S.get("caption_pos", "bottom")
+    align = 5 if pos == "middle" else 2
+    mcapv = round(S.get("caption_margin", 230) * H / 1920) if pos != "middle" else 0
     mlr = round(80 * W / 1080)
-    ov_align = 8 if S["overlay_pos"] == "top" else 2
-    ov_margin = round((130 if S["overlay_pos"] == "top" else 300) * H / 1920)
+    ov_align = 8 if S.get("overlay_pos", "top") == "top" else 2
+    ov_margin = round((130 if S.get("overlay_pos", "top") == "top" else 300) * H / 1920)
     ov_lr = round(60 * W / 1080)
-    if S["caption_box"]:
-        cap_border, cap_outline, cap_shadow, cap_back = 3, 12, 0, "&H99000000"
+
+    outline = int(S.get("caption_outline", 4))
+    if S.get("caption_box", False):
+        alpha = int(round((1.0 - float(S.get("caption_box_opacity", 0.6))) * 255))
+        cap_back = "&H%02X000000" % alpha
+        cap_border, cap_outline, cap_shadow = 3, max(6, outline + 6), 0
     else:
-        cap_border, cap_outline, cap_shadow, cap_back = 1, 4, 2, "&H64000000"
+        cap_border, cap_outline, cap_shadow, cap_back = 1, outline, 2, "&H64000000"
+
     return f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {W}
@@ -231,7 +239,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Caption,{S['caption_font']},{fs},{_ass_col(S['caption_color'])},&H000000FF,&H00000000,{cap_back},-1,0,0,0,100,100,0,0,{cap_border},{cap_outline},{cap_shadow},2,{mlr},{mlr},{mcapv},1
+Style: Caption,{S['caption_font']},{fs},{_ass_col(S['caption_color'])},&H000000FF,&H00000000,{cap_back},-1,0,0,0,100,100,0,0,{cap_border},{cap_outline},{cap_shadow},{align},{mlr},{mlr},{mcapv},1
 Style: Overlay,{S['caption_font']},{ovfs},{_ass_col(S['overlay_color'])},&H000000FF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,3,2,{ov_align},{ov_lr},{ov_lr},{ov_margin},1
 
 [Events]
@@ -253,17 +261,25 @@ def write_ass(path, segments, s, e, W, H, S):
                     words.append((ws - s, min(we, e) - s, wt.strip()))
         if S["caption_style"] == "karaoke" and words:
             hl, base = _ass_col(S["highlight_color"]), _ass_col(S["caption_color"])
-            for line in _group_words(words):
+            for line in _group_words(words, max_words=int(S.get("caption_max_words", 4))):
                 for j, w in enumerate(line):
                     st = w[0]
                     en = line[j + 1][0] if j + 1 < len(line) else w[1] + 0.2
-                    txt = " ".join((f"{{\\c{hl}}}{x[2]}{{\\c{base}}}" if k == j else x[2])
-                                   for k, x in enumerate(line))
+                    if S.get("highlight_mode", "color") == "box":
+                        txt = " ".join((f"{{\\c{base}\\3c&H000000&\\bord6}}" + x[2] + "{\\r}" if k == j else x[2])
+                                       for k, x in enumerate(line))
+                    else:
+                        txt = " ".join((f"{{\\c{hl}}}{x[2]}{{\\c{base}}}" if k == j else x[2])
+                                       for k, x in enumerate(line))
+                    if S.get("caption_uppercase", False):
+                        txt = txt.upper()
                     body += f"Dialogue: 0,{_ass_ts(st)},{_ass_ts(en)},Caption,,0,0,0,,{anim}{txt}\n"
         else:
             for seg in clip_segs:
                 st = max(seg["start"], s); en = min(seg["end"], e)
                 txt = seg["text"].strip().replace("{", "(").replace("}", ")")
+                if S.get("caption_uppercase", False):
+                    txt = txt.upper()
                 body += f"Dialogue: 0,{_ass_ts(st - s)},{_ass_ts(en - s)},Caption,,0,0,0,,{anim}{txt}\n"
     open(path, "w", encoding="utf-8").write(ass_head(W, H, S) + body)
 
@@ -277,7 +293,7 @@ def frame_graph(S):
                 "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30[o]")
     if S["frame_mode"] == "fit_blur":
         return ("[0:v]split=2[v1][v2];"
-                "[v1]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=30[bg];"
+                f"[v1]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma={int(S.get('blur_strength',30))}[bg];"
                 "[v2]scale=1080:1920:force_original_aspect_ratio=decrease[fg];"
                 "[bg][fg]overlay=(W-w)/2:(H-h)/2[o]")
     if S["frame_mode"] == "fit_color":
@@ -293,13 +309,18 @@ def audio_graph(fc, S):
     maps = ["-map", "[vout]"]; acodec = []
     music = S.get("music_path") or ""
     if music and S["original_audio"] == "keep":
-        fc += f";[0:a]volume=1.0[a0];[1:a]volume={S['music_volume']}[a1];[a0][a1]amix=inputs=2:duration=first[aout]"
+        fc += f";[0:a]volume={S.get('original_volume',1.0)}[a0];[1:a]volume={S['music_volume']}[a1];[a0][a1]amix=inputs=2:duration=first[aout]"
         maps += ["-map", "[aout]"]; acodec = ["-c:a", "aac"]
     elif music:
         fc += f";[1:a]volume={S['music_volume']}[aout]"
         maps += ["-map", "[aout]"]; acodec = ["-c:a", "aac"]
     elif S["original_audio"] == "keep":
-        maps += ["-map", "0:a?"]; acodec = ["-c:a", "aac"]
+        if float(S.get("original_volume", 1.0)) != 1.0:
+            fc += f";[0:a]volume={S.get('original_volume',1.0)}[aout]"
+            maps += ["-map", "[aout]"]
+        else:
+            maps += ["-map", "0:a?"]
+        acodec = ["-c:a", "aac"]
     return fc, maps, acodec
 
 
@@ -315,9 +336,12 @@ def render_segment(video_path, segments, s, e, out_path, S, font_dir):
         fc += f";[o]ass={ass}:fontsdir={font_dir}[o]"
     if S["mode"] == "reels":
         if S["progress_bar"]:
-            fc += f";[o]drawbox=x=0:y=0:w=iw*t/{dur:.2f}:h=18:color={S['border_color'].replace('#','0x')}@1:t=fill[o]"
+            fc += f";[o]drawbox=x=0:y=0:w=iw*t/{dur:.2f}:h=18:color={S.get('progress_color', S['border_color']).replace('#','0x')}@1:t=fill[o]"
         if S["border"]:
             fc += f";[o]drawbox=x=0:y=0:w=iw:h=ih:color={S['border_color'].replace('#','0x')}@1:t={S['border_width']}[o]"
+    if S.get("fade", False) and dur > 2:
+        fo = max(0.0, dur - 0.4)
+        fc += f";[o]fade=t=in:st=0:d=0.4,fade=t=out:st={fo:.2f}:d=0.4[o]"
     fc += ";[o]null[vout]"
     fc, maps, acodec = audio_graph(fc, S)
 
