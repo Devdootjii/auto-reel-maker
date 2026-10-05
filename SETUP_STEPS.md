@@ -1,42 +1,33 @@
-# Auto Reel Maker — web app (v5)
+# Auto Reel Maker — web app (v6)
 
-## FIX THE CRASH FIRST (important)
-The "Oh no / Error running app" crash was: your app is running on **Python 3.14**, and
-`tokenizers` / `av` have no wheels for it, so it tried to build from source and failed
-(needs Rust).
+## Status
+- Python 3.12 fix worked — the build now succeeds.
+- The app **no longer shows "Oh no"**. If anything goes wrong, it prints the real error
+  **on the page**. If it breaks, screenshot that message and send it — I can fix it exactly.
 
-**Streamlit Cloud cannot change the Python version after deploy** — you must delete and
-redeploy:
-1. In share.streamlit.io, open your app -> **Manage app** -> **Delete app**.
-2. Click **Create app** again, pick the same repo, main file `app.py`.
-3. Open **Advanced settings** -> **Python version** -> choose **3.12**.
-4. **Deploy**. (You can reuse the same subdomain.)
-It will then build cleanly — no Rust needed.
-
-## Files (upload all)
-- `app.py`
-- `engine.py`
+## Files to upload (all)
+- `app.py`   (updated)
+- `engine.py` (updated)
 - `requirements.txt`
-- `.streamlit/config.toml` (create it via GitHub: Add file -> Create new file ->
-  filename `.streamlit/config.toml` -> paste the config content)
+- `.streamlit/config.toml`
 
-## What's new in v5
-- **Ribbon tabs** at the top: Home · Captions · Animation · Framing · Overlay · Audio ·
-  Clips · YouTube. Click a tab -> its options open on the left.
-- **Compact phone-sized preview** (no more scrolling to see it), still instant.
-- **Many more options**: box + box opacity, UPPERCASE, words-per-line, caption position,
-  bottom margin, outline width, highlight mode (colour/box), blur strength, progress-bar
-  colour, original volume, fade in/out, max clips, overlay size, and more.
-- **Settings auto-save** — your choices are stored and reloaded, so you don't set them
-  again on the next visit. "Reset settings" button on the Home tab if you want to start over.
+Re-upload them to the same GitHub repo (Add file -> Upload files -> overwrite -> Commit).
+Streamlit auto-redeploys in ~1-2 min.
 
-## How to use
-1. Upload video(s).
-2. Pick a ribbon tab, set options (watch the live preview).
-3. **Generate** -> download `output.zip`, or copy the title/description/hashtags from the
-   copy boxes, or use the YouTube tab.
+## What's fixed / added
+- **Error surfacing**: real error shown on screen instead of a blank crash.
+- **Settings auto-save + validation**: your choices are saved and reloaded next time, and
+  an old/invalid saved value can no longer break a widget.
+- **Safety**: duration/upload reading can't crash the app.
+- Ribbon tabs, compact phone preview, many more options (box opacity, UPPERCASE, words per
+  line, caption position, outline width, highlight mode, blur strength, progress colour,
+  original volume, fade, max clips, overlay size), parallel jobs.
 
-## Notes
-- CPU-only host, ~2.7 GB RAM -> keep **Whisper model = `small`**.
-- Upload limit raised by `.streamlit/config.toml` (`maxUploadSize = 2000`).
-- App sleeps after ~12h idle; opening the link wakes it in ~30–60s.
+## About the 2-video upload
+Uploading 2 videos at once is supported (I tested it). But this host has ~2.7 GB RAM, so
+for big files it's safer to do one at a time. If it crashes with two, try one.
+
+## Reminders
+- Keep **Whisper model = `small`** (CPU host).
+- Upload limit is raised by `.streamlit/config.toml`.
+- App sleeps after ~12h idle; the link wakes it in ~30–60s.
