@@ -1,33 +1,26 @@
-# Auto Reel Maker — web app (v6)
+# Free Auto Reels Generator — web app (v7)
 
-## Status
-- Python 3.12 fix worked — the build now succeeds.
-- The app **no longer shows "Oh no"**. If anything goes wrong, it prints the real error
-  **on the page**. If it breaks, screenshot that message and send it — I can fix it exactly.
+New layout (your wireframe): header + tab bar + left options + centre phone preview +
+right progress/other options + bottom action bar. Plus a **How to use** tab.
 
-## Files to upload (all)
-- `app.py`   (updated)
-- `engine.py` (updated)
-- `requirements.txt`
-- `.streamlit/config.toml`
+## Just update app.py
+Only **`app.py`** changed. Re-upload it to the same GitHub repo
+(Add file -> Upload files -> overwrite -> Commit). Streamlit redeploys in ~1-2 min.
 
-Re-upload them to the same GitHub repo (Add file -> Upload files -> overwrite -> Commit).
-Streamlit auto-redeploys in ~1-2 min.
+(Your repo already has `engine.py`, `requirements.txt`, `.streamlit/config.toml` from before.)
 
-## What's fixed / added
-- **Error surfacing**: real error shown on screen instead of a blank crash.
-- **Settings auto-save + validation**: your choices are saved and reloaded next time, and
-  an old/invalid saved value can no longer break a widget.
-- **Safety**: duration/upload reading can't crash the app.
-- Ribbon tabs, compact phone preview, many more options (box opacity, UPPERCASE, words per
-  line, caption position, outline width, highlight mode, blur strength, progress colour,
-  original volume, fade, max clips, overlay size), parallel jobs.
+## The interface
+- **Top**: logo + title, and the video uploader on the right.
+- **Tab bar**: Home · Frame · Captions · Animations · Colors · Audio · Clips · **How to use**.
+  Click a tab -> its options open on the left.
+- **Left**: options for the selected tab.
+- **Centre**: phone-shaped **live preview** — one real frame of your video with your settings
+  drawn on top. Updates instantly; no video processing.
+- **Right**: **Progress** (live) and **Other options** (YouTube + Google Drive connect).
+- **Bottom**: **Generate video · Download · Save to Drive · Upload to YouTube**.
+- **How to use** tab: a step-by-step guide inside the app, so any user knows what to do.
 
-## About the 2-video upload
-Uploading 2 videos at once is supported (I tested it). But this host has ~2.7 GB RAM, so
-for big files it's safer to do one at a time. If it crashes with two, try one.
-
-## Reminders
-- Keep **Whisper model = `small`** (CPU host).
-- Upload limit is raised by `.streamlit/config.toml`.
-- App sleeps after ~12h idle; the link wakes it in ~30–60s.
+## Notes
+- CPU host, ~2.7 GB RAM -> keep **Whisper model = `small`**.
+- Settings auto-save; **Reset settings** is on the Home tab.
+- If anything breaks, the app now prints the real error on screen — screenshot it and send it.
