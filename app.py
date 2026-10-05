@@ -25,33 +25,82 @@ st.set_page_config(page_title="Free Auto Reels Generator", page_icon=None, layou
 
 st.markdown("""
 <style>
-  .stApp {background: linear-gradient(135deg,#080910,#131024,#0b0d18,#0e1224);
-          background-size: 300% 300%; animation: bgmove 24s ease infinite;}
-  @keyframes bgmove {0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
-  .block-container {padding: .8rem 1.3rem 1.4rem 1.3rem; max-width: 1600px;}
-  header[data-testid="stHeader"] {background: transparent;}
-  section[data-testid="stSidebar"] {display:none;}
+  /* ---------- animated, interactive background ---------- */
+  html, body, [data-testid="stAppViewContainer"] {background:#07080f;}
+  .stApp {
+    background:
+      radial-gradient(38% 45% at 18% 22%, rgba(124,77,255,.30), transparent 60%),
+      radial-gradient(34% 40% at 82% 26%, rgba(224,85,155,.24), transparent 60%),
+      radial-gradient(40% 45% at 52% 82%, rgba(34,211,238,.18), transparent 62%),
+      linear-gradient(135deg,#07080f,#0d0b1a,#07080f);
+    background-size: 200% 200%, 200% 200%, 200% 200%, 200% 200%;
+    animation: floatbg 26s ease-in-out infinite;
+  }
+  @keyframes floatbg {
+    0%   {background-position: 0% 0%,   100% 0%,   50% 100%, 0 0;}
+    50%  {background-position: 28% 22%, 70% 34%,  38% 70%,  0 0;}
+    100% {background-position: 0% 0%,   100% 0%,   50% 100%, 0 0;}
+  }
+  .stApp::before, .stApp::after {
+    content:""; position:fixed; border-radius:50%; filter:blur(90px); opacity:.30;
+    z-index:0; pointer-events:none;
+  }
+  .stApp::before {width:360px;height:360px;background:#7c4dff;top:-90px;left:-70px;
+    animation: drift1 20s ease-in-out infinite;}
+  .stApp::after  {width:300px;height:300px;background:#e0559b;bottom:-90px;right:-50px;
+    animation: drift2 24s ease-in-out infinite;}
+  @keyframes drift1 {0%,100%{transform:translate(0,0)}50%{transform:translate(70px,45px)}}
+  @keyframes drift2 {0%,100%{transform:translate(0,0)}50%{transform:translate(-55px,-35px)}}
 
-  .hdr {display:flex; align-items:center; gap:12px;}
-  .logo {width:40px;height:40px;border-radius:11px;display:flex;align-items:center;justify-content:center;
-         font-weight:800;color:#fff;background:linear-gradient(135deg,#7c4dff,#e0559b);font-size:.95rem;}
-  .apptitle {font-size:1.35rem;font-weight:800;color:#eef0fa;letter-spacing:.2px;}
-  .appsub {color:#8b90a8;font-size:.78rem;}
+  /* ---------- fit everything in one screen ---------- */
+  header[data-testid="stHeader"], [data-testid="stToolbar"], [data-testid="stAppToolbar"],
+  [data-testid="stDecoration"], #MainMenu, footer {display:none !important;}
+  .block-container {padding:.35rem .8rem .4rem .8rem !important; max-width:100% !important;}
+  div[data-testid="stVerticalBlock"] {gap:.3rem !important;}
+  div[data-testid="stHorizontalBlock"] {gap:.5rem !important;}
 
-  .panel {background:rgba(19,21,36,.88); border:1px solid #272b48; border-radius:16px;
-          padding:14px 16px; box-shadow:0 6px 24px rgba(0,0,0,.3); backdrop-filter:blur(6px);
-          margin-bottom:12px;}
-  .panel h4 {margin:0 0 8px 0; color:#e8eaf5; font-size:.96rem;}
-  .stButton>button, .stDownloadButton>button {border-radius:11px; font-weight:600;
-      border:1px solid #3a2f66; background:linear-gradient(90deg,#7c4dff,#e0559b); color:#fff;}
-  .stButton>button:hover, .stDownloadButton>button:hover {color:#fff; opacity:.93;}
-  div[data-testid="stSegmentedControl"] {background:rgba(19,21,36,.88); border:1px solid #272b48;
-      border-radius:14px; padding:5px;}
-  .note {color:#7b8199; font-size:.76rem;}
-  label, .stMarkdown p {font-size:.84rem;}
-  .guide h4 {color:#c9b8ff;}
-  .guide li {color:#c3c7db; font-size:.86rem; margin-bottom:4px;}
+  /* ---------- compact widgets ---------- */
+  label p, div[data-testid="stWidgetLabel"] p {font-size:.72rem !important; color:#9aa0b8 !important;
+      margin-bottom:0 !important;}
+  div[data-testid="stWidgetLabel"] {margin-bottom:-2px !important;}
+  div[data-baseweb="select"] > div {min-height:28px !important; font-size:.78rem !important;}
+  .stTextInput input, .stNumberInput input {min-height:28px !important; font-size:.78rem !important;}
+  .stSlider {padding:0 !important;}
+  .stCheckbox {margin-top:-4px !important;}
+  .stButton>button, .stDownloadButton>button {
+      min-height:30px !important; padding:0 10px !important; font-size:.78rem !important;
+      border-radius:10px; font-weight:600; border:1px solid #3a2f66;
+      background:linear-gradient(90deg,#7c4dff,#e0559b); color:#fff; transition:.2s;}
+  .stButton>button:hover, .stDownloadButton>button:hover {
+      color:#fff; transform:translateY(-1px); box-shadow:0 6px 18px rgba(124,77,255,.45);}
+  div[data-testid="stFileUploaderDropzone"] {padding:5px 10px !important; min-height:auto !important;}
+  div[data-testid="stFileUploaderDropzone"] span, div[data-testid="stFileUploaderDropzone"] small
+      {font-size:.72rem !important;}
+  div[data-testid="stExpander"] {border:1px solid #272b48 !important; border-radius:12px !important;}
+  div[data-testid="stExpander"] summary {font-size:.78rem !important; padding:4px 10px !important;}
+
+  /* ---------- panels ---------- */
+  .panel {background:rgba(17,19,33,.9); border:1px solid #272b48; border-radius:15px;
+          padding:10px 13px; box-shadow:0 8px 26px rgba(0,0,0,.35); backdrop-filter:blur(8px);
+          margin-bottom:8px; transition:.25s;}
+  .panel:hover {border-color:#3b3f68; box-shadow:0 10px 32px rgba(124,77,255,.22);}
+  .panel h4 {margin:0 0 6px 0; color:#e8eaf5; font-size:.88rem;}
+  .note {color:#7b8199; font-size:.7rem;}
+
+  .hdr {display:flex; align-items:center; gap:10px;}
+  .logo {width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+         font-weight:800;color:#fff;background:linear-gradient(135deg,#7c4dff,#e0559b);font-size:.82rem;
+         box-shadow:0 6px 18px rgba(124,77,255,.4);}
+  .apptitle {font-size:1.1rem;font-weight:800;color:#eef0fa;}
+  .appsub {color:#8b90a8;font-size:.7rem;}
+  .guide h4 {color:#c9b8ff; margin:8px 0 4px 0;}
+  .guide li, .guide p {color:#c3c7db; font-size:.82rem; margin-bottom:3px;}
   .guide b {color:#eef0fa;}
+  div[data-testid="stSegmentedControl"] {background:rgba(17,19,33,.9); border:1px solid #272b48;
+      border-radius:12px; padding:4px;}
+  div[data-testid="stSegmentedControl"] button {font-size:.76rem !important; padding:2px 8px !important;}
+  .stCodeBlock {margin-top:2px !important;}
+  code {font-size:.72rem !important;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -206,7 +255,7 @@ SAMPLE = {"hi": (["आज", "हम", "बात", "करेंगे", "क्
           "default": (["Here", "is", "how", "it", "works", "for", "you"], 2)}
 
 
-def preview_html(frame, S, lang, box_w=250):
+def preview_html(frame, S, lang, box_w=185):
     box_h = int(box_w * 16 / 9)
     words, hl = SAMPLE["hi"] if lang in ("hi", "mr", "ne") else SAMPLE["default"]
     if S.get("caption_uppercase"):
@@ -355,7 +404,9 @@ def main():
         st.markdown(GUIDE, unsafe_allow_html=True)
         return
 
-    left, center, right = st.columns([1, 0.95, 0.85], gap="medium")
+    have_out = bool(st.session_state.get("results"))
+    zpath = os.path.join(WORK, "output.zip")
+    left, center, right = st.columns([1, 0.9, 0.82], gap="medium")
 
     # ---- left: options for the selected tab ----
     with left:
@@ -443,6 +494,11 @@ def main():
         except Exception as e:
             st.warning(f"Preview nahi bana: {e}")
         st.markdown("</div>", unsafe_allow_html=True)
+        if have_out:
+            with st.expander("Title / description / hashtags (copy karo)"):
+                for x in st.session_state.get("details", []):
+                    st.markdown(f"`{x['file']}`")
+                    st.code(f"{x['title']}\n\n{x['desc']}\n\n{x['tags']} #shorts #reels", language=None)
 
     # ---- right: progress + other options ----
     with right:
@@ -541,8 +597,6 @@ def main():
     # ---- bottom action bar ----
     b1, b2, b3, b4 = st.columns(4)
     do_generate = b1.button("Generate video", type="primary", use_container_width=True)
-    have_out = bool(st.session_state.get("results"))
-    zpath = os.path.join(WORK, "output.zip")
     if have_out and os.path.exists(zpath):
         with open(zpath, "rb") as f:
             b2.download_button("Download", f, file_name="output.zip", use_container_width=True)
@@ -630,13 +684,6 @@ def main():
         except Exception as e:
             st.error(f"Generate fail: {e}")
 
-    if have_out:
-        st.markdown('<div class="panel"><h4>Title / description / hashtags</h4>'
-                    '<span class="note">Copy karke paste karo.</span>', unsafe_allow_html=True)
-        for x in st.session_state.get("details", []):
-            st.markdown(f"`{x['file']}`")
-            st.code(f"{x['title']}\n\n{x['desc']}\n\n{x['tags']} #shorts #reels", language=None)
-        st.markdown("</div>", unsafe_allow_html=True)
 
     if do_drive:
         creds = st.session_state.get("dr_creds")
