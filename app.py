@@ -55,8 +55,9 @@ st.markdown("""
   /* ---------- fit everything in one screen ---------- */
   header[data-testid="stHeader"], [data-testid="stToolbar"], [data-testid="stAppToolbar"],
   [data-testid="stDecoration"], #MainMenu, footer {display:none !important;}
-  .block-container {padding:.35rem .8rem .4rem .8rem !important; max-width:100% !important;}
-  div[data-testid="stVerticalBlock"] {gap:.3rem !important;}
+  .block-container {padding:.25rem .7rem .3rem .7rem !important; max-width:100% !important;}
+  div[data-testid="stElementContainer"] {margin-bottom:0 !important;}
+  div[data-testid="stVerticalBlock"] {gap:.15rem !important;}
   div[data-testid="stHorizontalBlock"] {gap:.5rem !important;}
 
   /* ---------- compact widgets ---------- */
@@ -79,13 +80,17 @@ st.markdown("""
   div[data-testid="stExpander"] {border:1px solid #272b48 !important; border-radius:12px !important;}
   div[data-testid="stExpander"] summary {font-size:.78rem !important; padding:4px 10px !important;}
 
-  /* ---------- panels ---------- */
-  .panel {background:rgba(17,19,33,.9); border:1px solid #272b48; border-radius:15px;
-          padding:10px 13px; box-shadow:0 8px 26px rgba(0,0,0,.35); backdrop-filter:blur(8px);
-          margin-bottom:8px; transition:.25s;}
-  .panel:hover {border-color:#3b3f68; box-shadow:0 10px 32px rgba(124,77,255,.22);}
-  .panel h4 {margin:0 0 6px 0; color:#e8eaf5; font-size:.88rem;}
-  .note {color:#7b8199; font-size:.7rem;}
+  /* ---------- panels (Streamlit bordered containers) ---------- */
+  div[data-testid="stVerticalBlockBorderWrapper"] {
+      background:rgba(17,19,33,.92); border:1px solid #272b48 !important; border-radius:14px;
+      padding:8px 11px !important; box-shadow:0 8px 26px rgba(0,0,0,.35); backdrop-filter:blur(8px);
+      transition:.25s;}
+  div[data-testid="stVerticalBlockBorderWrapper"]:hover {
+      border-color:#3b3f68 !important; box-shadow:0 10px 30px rgba(124,77,255,.22);}
+  div[data-testid="stVerticalBlockBorderWrapper"] > div {gap:.15rem !important;}
+  .note {color:#7b8199; font-size:.68rem;}
+  .panel {background:rgba(17,19,33,.92); border:1px solid #272b48; border-radius:14px;
+          padding:10px 13px; margin-bottom:8px;}
 
   .hdr {display:flex; align-items:center; gap:10px;}
   .logo {width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;
@@ -386,8 +391,8 @@ def main():
                                    accept_multiple_files=True, label_visibility="collapsed")
 
     if not uploads:
-        st.markdown('<div class="panel">Upload a video to begin. Not sure how it works?</div>',
-                    unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("Upload a video to begin. Not sure how it works? See the **How to use** tab.")
         st.markdown(GUIDE, unsafe_allow_html=True)
         return
 
@@ -410,66 +415,67 @@ def main():
 
     # ---- left: options for the selected tab ----
     with left:
-        st.markdown('<div class="panel">', unsafe_allow_html=True)
-        st.markdown(f"<h4>{tab}</h4>", unsafe_allow_html=True)
-        if tab == "Home":
-            st.selectbox("Mode", ALLOWED["mode"], key="mode")
-            st.selectbox("Language", ALLOWED["language"], key="language")
-            st.selectbox("Whisper model", ALLOWED["model_size"], key="model_size",
-                         help="CPU pe 'small' best.")
-            st.selectbox("Caption font", ALLOWED["FONT"], key="FONT")
-            if st.button("Reset settings", use_container_width=True):
-                for k, v in DEFAULTS.items():
-                    st.session_state[k] = v
-                persist(); st.rerun()
-        elif tab == "Frame":
-            st.selectbox("Frame mode", ALLOWED["frame_mode"], key="frame_mode")
-            st.slider("Blur strength", 0, 80, key="blur_strength")
-            st.slider("Crop zoom", 1.0, 3.0, key="crop_zoom", step=0.1)
-            st.slider("Crop X", 0.0, 1.0, key="crop_x", step=0.05)
-            st.slider("Crop Y", 0.0, 1.0, key="crop_y", step=0.05)
-            st.checkbox("Border", key="border")
-            st.slider("Border width", 0, 40, key="border_width")
-        elif tab == "Captions":
-            st.selectbox("Caption style", ALLOWED["caption_style"], key="caption_style")
-            c1, c2 = st.columns(2)
-            c1.checkbox("Box behind text", key="caption_box")
-            c2.selectbox("Position", ALLOWED["caption_pos"], key="caption_pos")
-            c1.slider("Size", 30, 110, key="caption_size")
-            c2.slider("Words/line", 1, 8, key="caption_max_words")
-            c1.checkbox("UPPERCASE", key="caption_uppercase")
-            c2.selectbox("Highlight", ALLOWED["highlight_mode"], key="highlight_mode")
-            c1.slider("Outline", 0, 10, key="caption_outline")
-            c2.slider("Bottom margin", 60, 500, key="caption_margin")
-            st.slider("Box opacity", 0.0, 1.0, key="caption_box_opacity", step=0.05)
-            st.text_input("Overlay text", key="overlay_text", placeholder="Follow for more")
-            c1, c2 = st.columns(2)
-            c1.selectbox("Overlay position", ALLOWED["overlay_pos"], key="overlay_pos")
-            c2.slider("Overlay size", 20, 110, key="overlay_size")
-        elif tab == "Animations":
-            st.selectbox("Caption animation", ALLOWED["caption_anim"], key="caption_anim")
-            st.checkbox("Slow zoom on video", key="slow_zoom")
-            st.checkbox("Fade in / out", key="fade")
-            st.checkbox("Progress bar", key="progress_bar")
-        elif tab == "Colors":
-            st.color_picker("Caption text", key="caption_color")
-            st.color_picker("Karaoke highlight", key="highlight_color")
-            st.color_picker("Border", key="border_color")
-            st.color_picker("Background", key="bg_color")
-            st.color_picker("Progress bar", key="progress_color")
-            st.color_picker("Overlay text", key="overlay_color")
-        elif tab == "Audio":
-            st.selectbox("Original audio", ALLOWED["original_audio"], key="original_audio")
-            st.slider("Original volume", 0.0, 2.0, key="original_volume", step=0.05)
-            st.file_uploader("Background music", type=["mp3", "m4a", "wav", "aac"], key="music_file")
-            st.slider("Music volume", 0.0, 1.0, key="music_volume", step=0.05)
-        elif tab == "Clips":
-            c1, c2 = st.columns(2)
-            c1.number_input("Min clip (s)", 5, 300, key="min_dur")
-            c2.number_input("Max clip (s)", 10, 600, key="max_dur")
-            c1.number_input("Max clips (0=all)", 0, 100, key="max_clips")
-            c2.number_input("Parallel jobs", 1, 8, key="workers")
-        st.markdown("</div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown(f"**{tab}**")
+            if tab == "Home":
+                st.selectbox("Mode", ALLOWED["mode"], key="mode")
+                st.selectbox("Language", ALLOWED["language"], key="language")
+                st.selectbox("Whisper model", ALLOWED["model_size"], key="model_size")
+                st.selectbox("Caption font", ALLOWED["FONT"], key="FONT")
+                if st.button("Reset settings", use_container_width=True):
+                    for k, v in DEFAULTS.items():
+                        st.session_state[k] = v
+                    persist(); st.rerun()
+            elif tab == "Frame":
+                st.selectbox("Frame mode", ALLOWED["frame_mode"], key="frame_mode")
+                st.slider("Blur strength", 0, 80, key="blur_strength")
+                st.slider("Crop zoom", 1.0, 3.0, key="crop_zoom", step=0.1)
+                c1, c2 = st.columns(2)
+                c1.slider("Crop X", 0.0, 1.0, key="crop_x", step=0.05)
+                c2.slider("Crop Y", 0.0, 1.0, key="crop_y", step=0.05)
+                c1.checkbox("Border", key="border")
+                c2.slider("Border width", 0, 40, key="border_width")
+            elif tab == "Captions":
+                st.selectbox("Caption style", ALLOWED["caption_style"], key="caption_style")
+                c1, c2 = st.columns(2)
+                c1.checkbox("Box", key="caption_box")
+                c2.selectbox("Position", ALLOWED["caption_pos"], key="caption_pos")
+                c1.slider("Size", 30, 110, key="caption_size")
+                c2.slider("Words/line", 1, 8, key="caption_max_words")
+                c1.checkbox("UPPERCASE", key="caption_uppercase")
+                c2.selectbox("Highlight", ALLOWED["highlight_mode"], key="highlight_mode")
+                c1.slider("Outline", 0, 10, key="caption_outline")
+                c2.slider("Bottom margin", 60, 500, key="caption_margin")
+                st.slider("Box opacity", 0.0, 1.0, key="caption_box_opacity", step=0.05)
+                st.text_input("Overlay text", key="overlay_text", placeholder="Follow for more")
+                c1, c2 = st.columns(2)
+                c1.selectbox("Overlay position", ALLOWED["overlay_pos"], key="overlay_pos")
+                c2.slider("Overlay size", 20, 110, key="overlay_size")
+            elif tab == "Animations":
+                st.selectbox("Caption animation", ALLOWED["caption_anim"], key="caption_anim")
+                c1, c2 = st.columns(2)
+                c1.checkbox("Slow zoom", key="slow_zoom")
+                c2.checkbox("Fade in/out", key="fade")
+                st.checkbox("Progress bar", key="progress_bar")
+            elif tab == "Colors":
+                c1, c2 = st.columns(2)
+                c1.color_picker("Caption text", key="caption_color")
+                c2.color_picker("Highlight", key="highlight_color")
+                c1.color_picker("Border", key="border_color")
+                c2.color_picker("Background", key="bg_color")
+                c1.color_picker("Progress bar", key="progress_color")
+                c2.color_picker("Overlay text", key="overlay_color")
+            elif tab == "Audio":
+                st.selectbox("Original audio", ALLOWED["original_audio"], key="original_audio")
+                st.slider("Original volume", 0.0, 2.0, key="original_volume", step=0.05)
+                st.file_uploader("Background music", type=["mp3", "m4a", "wav", "aac"], key="music_file")
+                st.slider("Music volume", 0.0, 1.0, key="music_volume", step=0.05)
+            elif tab == "Clips":
+                c1, c2 = st.columns(2)
+                c1.number_input("Min clip (s)", 5, 300, key="min_dur")
+                c2.number_input("Max clip (s)", 10, 600, key="max_dur")
+                c1.number_input("Max clips (0=all)", 0, 100, key="max_clips")
+                c2.number_input("Parallel jobs", 1, 8, key="workers")
 
     persist()
 
@@ -485,15 +491,12 @@ def main():
 
     # ---- center: phone preview ----
     with center:
-        st.markdown('<div class="panel"><h4>Preview</h4>'
-                    '<span class="note">On a frame of your original video — updates instantly.</span><br><br>',
-                    unsafe_allow_html=True)
-        try:
-            t = min(10, max(0, dur_total / 2))
-            st.markdown(preview_html(frame_uri(primary, t), S, G("language")), unsafe_allow_html=True)
-        except Exception as e:
-            st.warning(f"Preview nahi bana: {e}")
-        st.markdown("</div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            try:
+                t = min(10, max(0, dur_total / 2))
+                st.markdown(preview_html(frame_uri(primary, t), S, G("language")), unsafe_allow_html=True)
+            except Exception as e:
+                st.warning(f"Preview nahi bana: {e}")
         if have_out:
             with st.expander("Title / description / hashtags (copy karo)"):
                 for x in st.session_state.get("details", []):
@@ -502,13 +505,13 @@ def main():
 
     # ---- right: progress + other options ----
     with right:
-        st.markdown('<div class="panel"><h4>Progress</h4>', unsafe_allow_html=True)
-        prog = st.empty()
-        status = st.empty()
-        status.markdown('<span class="note">Idle. Press “Generate video”.</span>', unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        st.markdown('<div class="panel"><h4>Other options</h4>', unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("**Progress**")
+            prog = st.empty()
+            status = st.empty()
+            status.markdown('<span class="note">Idle. Press “Generate video”.</span>', unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("**Other options**")
         with st.expander("YouTube"):
             SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
             tp = os.path.join(WORK, "yt_token.json")
@@ -592,8 +595,6 @@ def main():
                             st.rerun()
                         except Exception as e:
                             st.error(f"Connect fail: {e}")
-        st.markdown("</div>", unsafe_allow_html=True)
-
     # ---- bottom action bar ----
     b1, b2, b3, b4 = st.columns(4)
     do_generate = b1.button("Generate video", type="primary", use_container_width=True)

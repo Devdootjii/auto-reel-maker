@@ -1,27 +1,33 @@
-# Free Auto Reels Generator — web app (v8)
+# Free Auto Reels Generator — web app (v9)
 
-## What changed in v8
-- **Everything fits one screen — no page scrolling.** Streamlit's own header/toolbar is hidden,
-  all widgets, labels, buttons and the upload box are compacted, and the preview is smaller.
-- **New animated background** — slow-moving gradient + drifting glow orbs, and panels/buttons
-  react on hover (lift + glow).
-- The "Title / description / hashtags" panel now lives inside the centre column as a collapsed
-  expander, so it never pushes the layout down.
+## 1) FIX THE CRASH FIRST — Python must be 3.12
+Your last crash log still says **"Using Python 3.14.7"**. On 3.14 the package
+`tokenizers` has no prebuilt wheel, so it tries to compile from source and fails (needs Rust).
 
-## Update
-Only **`app.py`** changed. Re-upload it to the same GitHub repo (overwrite -> Commit).
-Streamlit redeploys in ~1-2 min.
+Streamlit Cloud **cannot change the Python version after deploy**. So:
 
-## Layout (per your wireframe)
-```
-[ logo + title ............................ upload video ]
-[ home | frame | captions | animations | colors | audio | clips | how to use ]
-[ options (left) | phone preview (centre) | progress + other options (right) ]
-[ Generate video | Download | Save to Drive | Upload to YouTube ]
-```
-The **How to use** tab explains the whole flow inside the app.
+1. share.streamlit.io -> your app -> the **⋮ (three dots) menu** -> **Delete app**.
+2. Click **Create app** again -> pick the same repo -> main file `app.py`.
+3. **Before pressing Deploy**, open **Advanced settings** -> **Python version** -> choose **3.12**.
+4. Click **Deploy**.
+5. Wait ~5–10 min. It will build cleanly (no Rust needed).
+
+Until this is done, the app will keep showing "Oh no".
+
+## 2) UI fixes in v9
+- **Panels are now real Streamlit containers** (`st.container(border=True)`). Previously I
+  faked them with `<div>` tags, which Streamlit does not wrap around widgets — that is exactly
+  why you saw **empty space** and **overlapping boxes** on the right. Fixed.
+- **"Preview" heading removed** — the preview speaks for itself now.
+- **Everything is tighter and smaller** — global spacing reduced, widget gaps cut, smaller
+  inputs/sliders/buttons, so it fits one screen with no scrolling.
+- Layout unchanged otherwise: header + tabs + left options + centre preview + right
+  progress/other + bottom action bar.
+
+## 3) Update
+Re-upload **`app.py`** to the same repo (overwrite -> Commit). Auto-redeploys.
 
 ## Notes
-- CPU host -> keep **Whisper model = `small`**.
+- Keep **Whisper model = `small`**; for Hindi set **Language = `hi`** (auto often mis-detects).
 - Settings auto-save; Reset is on the Home tab.
-- If anything breaks, the app prints the real error on screen — screenshot it and send it.
+- If it breaks, the app prints the real error on screen — screenshot it and send it.
