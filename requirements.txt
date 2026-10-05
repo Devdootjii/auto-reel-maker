@@ -1,5 +1,6 @@
 streamlit
 faster-whisper
+tokenizers>=0.22
 scikit-learn
 imageio-ffmpeg
 google-api-python-client
