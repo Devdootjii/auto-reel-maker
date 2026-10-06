@@ -1,28 +1,20 @@
-# Free Auto Reels Generator — web app (v11)
+# Free Auto Reels Generator — web app (v12)
 
-## The big fix: settings no longer reset
-Root cause found. Streamlit **deletes the state of any widget that isn't rendered on the current
-run**. Because each ribbon tab only renders its own widgets, switching tabs wiped the earlier
-choices — that's why "jo pehle kiya wo default ho jata hai".
+## Fixed
+- **`Generate fail: name 'full_transcript' is not defined`** — I had accidentally dropped a
+  helper function when rewriting. Restored. Generate works now.
+  (I also ran a full static check: every function the app calls is defined.)
+- **Video preview is now phone-shaped** — when you pick **Video** preview mode, the sample
+  renders inside a phone-style frame (rounded, bezel), matching the Frame preview.
 
-Fix: all settings now live in **one plain dict** (`st.session_state["S"]`) that is *not* tied to
-widget keys. Widgets read their value from that dict and write back into it. Switching tabs can
-no longer reset anything.
-
-## Other changes in v11
-- **iPhone-style phone preview** — rounded bezel + dynamic island. Shows a **real frame of your
-  video** with your settings drawn on top, and uses the **real caption words** (from a short
-  window of your video) so the preview matches the output.
-- **Preview mode toggle** (right column): **Frame** (instant, default) or **Video** (renders a
-  short 6-second sample with sound). Switch any time.
-- **Border is OFF by default** now (add it if you want it).
-- **Description / hashtags moved to the right column** (no longer under the preview).
-- **Tighter layout** — wasted gaps removed, uploaded video shown as a small badge, smaller widgets.
+## Good news
+The **build now succeeds on Python 3.14** — the `tokenizers>=0.22` pin in `requirements.txt`
+did its job. You no longer need to juggle Python versions.
 
 ## Update
-Only **`app.py`** changed. Re-upload it to the same repo (overwrite → Commit). Auto-redeploys.
+Only **`app.py`** changed. Re-upload it to the same repo (overwrite -> Commit).
 
-## Notes
-- First preview does a 6-second transcription to get real caption words (once, then cached).
+## Reminders
 - Keep **Whisper model = `small`**; for Hindi/Hinglish set **Language = `hi`**.
+- Preview mode: **Frame** (instant, default) or **Video** (6-second real sample).
 - Settings auto-save; Reset is on the Home tab.

@@ -107,6 +107,10 @@ st.markdown("""
     border-radius:11px;padding:3px;}
   div[data-testid="stSegmentedControl"] button{font-size:.72rem !important;padding:1px 7px !important;}
   code{font-size:.7rem !important;}
+  /* video preview -> phone shape */
+  div[data-testid="stVideo"]{max-width:216px;margin:0 auto;border-radius:29px;overflow:hidden;
+    border:8px solid #2a2e3d;box-shadow:0 18px 44px rgba(0,0,0,.6);background:#000;}
+  div[data-testid="stVideo"] video{border-radius:22px;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -365,6 +369,17 @@ def phone_html(frame, S, words):
     return ("<style>" + font_face(S["caption_font"]) + "</style>"
             "<div class='phone'><div class='phone-screen'>"
             "<div class='island'></div>" + inner + "</div></div>")
+
+
+def full_transcript(video_path, model_size, language, progress_cb=None):
+    key = f"{video_path}|{model_size}|{language}"
+    store = st.session_state.setdefault("tr", {})
+    if key in store:
+        return store[key]
+    audio = engine.extract_audio(video_path, out=os.path.join(WORK, "full.f32"))
+    segs, _ = do_transcribe(audio, model_size, language, progress_cb)
+    store[key] = segs
+    return segs
 
 
 def build_settings(music_path):
