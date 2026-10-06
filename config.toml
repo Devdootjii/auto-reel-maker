@@ -1,0 +1,17 @@
+[server]
+maxUploadSize = 2000
+fileWatcherType = "none"
+runOnSave = false
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"
+
+[theme]
+base = "dark"
+primaryColor = "#7c5cf0"
+backgroundColor = "#0c0e13"
+secondaryBackgroundColor = "#13161d"
+textColor = "#e8eaf0"
