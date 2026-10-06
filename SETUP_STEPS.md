@@ -1,40 +1,28 @@
-# Free Auto Reels Generator — PERMANENT FIX (v10)
+# Free Auto Reels Generator — web app (v11)
 
-## No more Python-version juggling.
-The crash was: pip was pulling an **old `tokenizers`** (no wheel for Python 3.14), so it tried
-to compile it from source and demanded Rust -> build failed.
+## The big fix: settings no longer reset
+Root cause found. Streamlit **deletes the state of any widget that isn't rendered on the current
+run**. Because each ribbon tab only renders its own widgets, switching tabs wiped the earlier
+choices — that's why "jo pehle kiya wo default ho jata hai".
 
-`tokenizers 0.22+` ships an **abi3 wheel** that works on Python 3.10 AND every later version,
-including 3.14. So I pinned it in `requirements.txt`. Now **every dependency installs as a
-prebuilt wheel** — no Rust, no build, on any Python version. Verified:
+Fix: all settings now live in **one plain dict** (`st.session_state["S"]`) that is *not* tied to
+widget keys. Widgets read their value from that dict and write back into it. Switching tabs can
+no longer reset anything.
 
-```
-faster-whisper 1.2.1   wheel
-tokenizers     0.23.2  wheel
-av             19.0.1  wheel
-ctranslate2    4.8.2   wheel
-onnxruntime    1.30.0  wheel
-```
+## Other changes in v11
+- **iPhone-style phone preview** — rounded bezel + dynamic island. Shows a **real frame of your
+  video** with your settings drawn on top, and uses the **real caption words** (from a short
+  window of your video) so the preview matches the output.
+- **Preview mode toggle** (right column): **Frame** (instant, default) or **Video** (renders a
+  short 6-second sample with sound). Switch any time.
+- **Border is OFF by default** now (add it if you want it).
+- **Description / hashtags moved to the right column** (no longer under the preview).
+- **Tighter layout** — wasted gaps removed, uploaded video shown as a small badge, smaller widgets.
 
-You do **NOT** need to delete/redeploy for the Python version any more.
+## Update
+Only **`app.py`** changed. Re-upload it to the same repo (overwrite → Commit). Auto-redeploys.
 
-## What to do (2 files)
-Re-upload these to your GitHub repo (overwrite -> Commit):
-1. **`requirements.txt`**  <- the permanent fix
-2. **`app.py`**            <- UI fixes + it now prints any error on screen
-
-Then in Streamlit: **Reboot** the app (or just wait for the auto-redeploy). It will build cleanly.
-
-## What changed in app.py (v10)
-- **Panels are real Streamlit containers** now (`st.container(border=True)`). The earlier
-  "empty space" and "overlapping boxes" were caused by my `<div>` trick — Streamlit does not
-  wrap widgets in injected divs. Fixed.
-- **"Preview" heading removed.**
-- **Everything tighter & smaller** — reduced spacing, smaller inputs/sliders/buttons, so it
-  fits one screen without scrolling.
-- The **entire app is wrapped in a try/except**, so if anything ever fails you'll see the real
-  error on the page instead of "Oh no".
-
-## Reminders
-- Keep **Whisper model = `small`**; for Hindi/Hinglish set **Language = `hi`** (auto mis-detects).
+## Notes
+- First preview does a 6-second transcription to get real caption words (once, then cached).
+- Keep **Whisper model = `small`**; for Hindi/Hinglish set **Language = `hi`**.
 - Settings auto-save; Reset is on the Home tab.
