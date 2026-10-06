@@ -107,10 +107,7 @@ st.markdown("""
     border-radius:11px;padding:3px;}
   div[data-testid="stSegmentedControl"] button{font-size:.72rem !important;padding:1px 7px !important;}
   code{font-size:.7rem !important;}
-  /* video preview -> phone shape */
-  div[data-testid="stVideo"]{max-width:216px;margin:0 auto;border-radius:29px;overflow:hidden;
-    border:8px solid #2a2e3d;box-shadow:0 18px 44px rgba(0,0,0,.6);background:#000;}
-  div[data-testid="stVideo"] video{border-radius:22px;}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -287,6 +284,16 @@ def render_preview_video(video_path, ss, dur, model_size, language, settings_jso
     return out
 
 
+@st.cache_data(show_spinner=False)
+def preview_video_b64(video_path, ss, dur, model_size, language, settings_json):
+    """Render a small sample and return it as a data URI, so it can play INSIDE the phone."""
+    out = render_preview_video(video_path, ss, dur, model_size, language, settings_json)
+    small = out + ".small.mp4"
+    subprocess.run([engine.ffmpeg_exe(), "-y", "-loglevel", "error", "-i", out,
+                    "-vf", "scale=540:960", "-crf", "31", "-preset", "veryfast", "-an", small], check=True)
+    return "data:video/mp4;base64," + base64.b64encode(open(small, "rb").read()).decode()
+
+
 FONT_FILES = {"Poppins": "Poppins-Bold.ttf", "Anton": "Anton-Regular.ttf", "Montserrat": "Montserrat.ttf",
               "Bebas Neue": "BebasNeue-Regular.ttf", "Noto Sans Devanagari": "NotoSansDevanagari.ttf"}
 
@@ -303,21 +310,22 @@ def font_face(font_name):
     return "@font-face{font-family:'PV';src:url(data:font/ttf;base64," + b64 + ");font-weight:700;}"
 
 
-def phone_html(frame, S, words):
+def phone_html(frame, S, words, video_b64=None):
     """iPhone-style phone with the real frame + settings drawn on top."""
     bw = S["border_width"] if S["border"] else 0
-    if S["frame_mode"] == "fit_blur":
-        bg = ("background-image:url(" + frame + ");background-size:cover;background-position:center;"
-              "filter:blur(" + str(int(S["blur_strength"] / 2.6)) + "px) brightness(.72);")
-        fg = ("background-image:url(" + frame + ");background-size:contain;background-position:center;"
-              "background-repeat:no-repeat;")
-    elif S["frame_mode"] == "fit_color":
-        bg = "background:" + S["bg_color"] + ";"
-        fg = ("background-image:url(" + frame + ");background-size:contain;background-position:center;"
-              "background-repeat:no-repeat;")
-    else:
-        bg = "background:#000;"
-        fg = "background-image:url(" + frame + ");background-size:cover;background-position:center;"
+    if not video_b64:
+        if S["frame_mode"] == "fit_blur":
+            bg = ("background-image:url(" + frame + ");background-size:cover;background-position:center;"
+                  "filter:blur(" + str(int(S["blur_strength"] / 2.6)) + "px) brightness(.72);")
+            fg = ("background-image:url(" + frame + ");background-size:contain;background-position:center;"
+                  "background-repeat:no-repeat;")
+        elif S["frame_mode"] == "fit_color":
+            bg = "background:" + S["bg_color"] + ";"
+            fg = ("background-image:url(" + frame + ");background-size:contain;background-position:center;"
+                  "background-repeat:no-repeat;")
+        else:
+            bg = "background:#000;"
+            fg = "background-image:url(" + frame + ");background-size:cover;background-position:center;"
 
     box_w = 200
     fs = max(8, round(S["caption_size"] * box_w / 1080 * 2.1))
@@ -360,9 +368,13 @@ def phone_html(frame, S, words):
 
     prog = ("<div style='position:absolute;top:0;left:0;height:4px;width:42%;background:"
             + S["progress_color"] + ";'></div>") if S["progress_bar"] else ""
-    inner = ("<div style='position:absolute;inset:0;" + bg + "'></div>"
-             "<div style='position:absolute;inset:0;" + fg + "'></div>"
-             + prog + ov + cap)
+    if video_b64:
+        screen = ("<video src='" + video_b64 + "' autoplay muted loop playsinline "
+                  "style='position:absolute;inset:0;width:100%;height:100%;object-fit:cover;'></video>")
+    else:
+        screen = ("<div style='position:absolute;inset:0;" + bg + "'></div>"
+                  "<div style='position:absolute;inset:0;" + fg + "'></div>")
+    inner = screen + prog + ov + cap
     if bw:
         inner = "<div style='position:absolute;inset:0;border:" + str(bw) + "px solid " + \
                 S["border_color"] + ";border-radius:29px;z-index:7;'></div>" + inner
@@ -539,10 +551,10 @@ def main():
             if S["preview_mode"] == "video":
                 with st.spinner("Sample render…"):
                     try:
-                        pv = render_preview_video(primary, 0.0, 6.0, S["model_size"],
-                                                  None if S["language"] == "auto" else S["language"],
-                                                  json.dumps(Sfull, sort_keys=True))
-                        st.video(pv)
+                        vb = preview_video_b64(primary, 0.0, 5.0, S["model_size"],
+                                               None if S["language"] == "auto" else S["language"],
+                                               json.dumps(Sfull, sort_keys=True))
+                        st.markdown(phone_html(None, Sfull, None, video_b64=vb), unsafe_allow_html=True)
                     except Exception as e:
                         st.warning(f"Video preview nahi bana: {e}")
             else:

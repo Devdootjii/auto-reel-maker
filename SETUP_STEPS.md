@@ -1,20 +1,23 @@
-# Free Auto Reels Generator — web app (v12)
+# Free Auto Reels Generator — web app (v13)
 
 ## Fixed
-- **`Generate fail: name 'full_transcript' is not defined`** — I had accidentally dropped a
-  helper function when rewriting. Restored. Generate works now.
-  (I also ran a full static check: every function the app calls is defined.)
-- **Video preview is now phone-shaped** — when you pick **Video** preview mode, the sample
-  renders inside a phone-style frame (rounded, bezel), matching the Frame preview.
+- **Video preview now plays INSIDE the iPhone frame.** Earlier it appeared as a separate
+  rectangular player. Now the sample is embedded in the phone screen, so both preview modes
+  (Frame and Video) look the same phone.
+- (previous fix) `full_transcript` helper restored — Generate works.
+- The build now succeeds on Python 3.14 (`tokenizers>=0.22` pin) — no Python juggling.
 
-## Good news
-The **build now succeeds on Python 3.14** — the `tokenizers>=0.22` pin in `requirements.txt`
-did its job. You no longer need to juggle Python versions.
+## IMPORTANT — make sure you are running the new file
+Your last screenshot showed the plain "Oh no" crash page. That is the OLD app. The new app
+shows a friendly message with the real error instead. So please:
+1. GitHub -> re-upload **`app.py`** (overwrite -> Commit).
+2. Streamlit -> your app -> **Reboot** (or wait for auto-redeploy).
+3. Hard-refresh the browser (Ctrl+Shift+R).
 
-## Update
-Only **`app.py`** changed. Re-upload it to the same repo (overwrite -> Commit).
+If it still shows "Oh no", the deployed file is not the new one — check the repo's `app.py`
+timestamp / commit.
 
 ## Reminders
 - Keep **Whisper model = `small`**; for Hindi/Hinglish set **Language = `hi`**.
-- Preview mode: **Frame** (instant, default) or **Video** (6-second real sample).
+- Right column has the **Preview** switch: Frame (instant) or Video (5s real sample).
 - Settings auto-save; Reset is on the Home tab.
