@@ -1,4 +1,4 @@
-streamlit
+streamlit>=1.40
 faster-whisper
 tokenizers>=0.22
 scikit-learn
