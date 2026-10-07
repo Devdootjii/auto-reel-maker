@@ -7,7 +7,9 @@ import os
 import re
 import glob
 import json
+import threading
 import subprocess
+import concurrent.futures
 from collections import Counter
 
 import numpy as np
@@ -23,36 +25,45 @@ FONT_URLS = {
 FONT_CHOICES = ["Poppins", "Anton", "Montserrat", "Bebas Neue", "Noto Sans Devanagari", "DejaVu Sans"]
 
 
-def ensure_fonts(font_dir):
-    """Download caption fonts AND write a fontconfig file.
+def _download_font(item):
+    name, url, font_dir = item
+    dest = os.path.join(font_dir, name)
+    if os.path.exists(dest) and os.path.getsize(dest) > 10_000:
+        return
+    try:
+        subprocess.run(["curl", "-sLf", "--retry", "2", "-o", dest, url], check=False, timeout=90)
+        if os.path.exists(dest) and os.path.getsize(dest) <= 10_000:
+            os.remove(dest)          # failed / error page -> retry next start
+    except Exception:
+        pass
 
-    Streamlit Cloud has no fontconfig config at all, so libass cannot find any
-    font unless we hand it one. We point FONTCONFIG_FILE at our own minimal
-    config that lists our fonts folder.
+
+def ensure_fonts(font_dir):
+    """Download caption fonts (in parallel) AND point fontconfig at them.
+
+    Streamlit Cloud has no fontconfig config, so libass cannot find any font unless
+    we hand it one via FONTCONFIG_FILE.
     """
     font_dir = os.path.abspath(font_dir)
     os.makedirs(font_dir, exist_ok=True)
-    for name, url in FONT_URLS.items():
-        dest = os.path.join(font_dir, name)
-        if not os.path.exists(dest):
-            try:
-                subprocess.run(["curl", "-sL", "-o", dest, url], check=False, timeout=60)
-            except Exception:
-                pass
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
+        list(ex.map(_download_font, [(n, u, font_dir) for n, u in FONT_URLS.items()]))
 
     root = os.path.dirname(font_dir)
     cache = os.path.join(root, "fontcache")
     os.makedirs(cache, exist_ok=True)
     conf = os.path.join(root, "fonts.conf")
-    with open(conf, "w", encoding="utf-8") as f:
-        f.write(
-            '<?xml version="1.0"?>\n'
-            '<!DOCTYPE fontconfig SYSTEM "fonts.dtd">\n'
-            "<fontconfig>\n"
-            f"  <dir>{font_dir}</dir>\n"
-            f"  <cachedir>{cache}</cachedir>\n"
-            "</fontconfig>\n"
-        )
+    text = (
+        '<?xml version="1.0"?>\n'
+        '<!DOCTYPE fontconfig SYSTEM "fonts.dtd">\n'
+        "<fontconfig>\n"
+        f"  <dir>{font_dir}</dir>\n"
+        f"  <cachedir>{cache}</cachedir>\n"
+        "</fontconfig>\n"
+    )
+    if not os.path.exists(conf) or open(conf, encoding="utf-8").read() != text:
+        with open(conf, "w", encoding="utf-8") as f:
+            f.write(text)
     os.environ["FONTCONFIG_FILE"] = conf
     return font_dir
 
@@ -69,6 +80,51 @@ def ffmpeg_exe():
         return "ffmpeg"
 
 
+def _run(cmd):
+    """Run ffmpeg; on failure raise an error that shows ffmpeg's real message."""
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0:
+        lines = [l for l in (r.stderr or "").strip().splitlines() if l.strip()]
+        raise RuntimeError("ffmpeg: " + " | ".join(lines[-3:])[-350:])
+    return r
+
+
+_AUDIO_CACHE = {}
+
+
+def has_audio(path):
+    if path not in _AUDIO_CACHE:
+        try:
+            err = subprocess.run([ffmpeg_exe(), "-i", path], capture_output=True, text=True).stderr
+            _AUDIO_CACHE[path] = bool(re.search(r"Stream #\d+:\d+.*?: Audio:", err))
+        except Exception:
+            _AUDIO_CACHE[path] = True
+    return _AUDIO_CACHE[path]
+
+
+def duration(path):
+    try:
+        err = subprocess.run([ffmpeg_exe(), "-i", path], capture_output=True, text=True).stderr
+        m = re.search(r"Duration: (\d+):(\d+):([\d.]+)", err)
+        if m:
+            return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
+    except Exception:
+        pass
+    return 0.0
+
+
+def even_clips(total, min_dur=20, max_dur=60):
+    """Fallback when there is no speech (e.g. silent screen recordings): cut evenly."""
+    if total <= 0:
+        return []
+    if total <= max_dur:
+        return [(0.0, round(total, 1))]
+    n = int(-(-total // max_dur))
+    step = total / n
+    out = [(round(i * step, 1), round((i + 1) * step, 1)) for i in range(n)]
+    return [c for c in out if c[1] - c[0] >= min(min_dur, 5)]
+
+
 def get_dim(path):
     """(width, height) of a video."""
     try:
@@ -82,6 +138,9 @@ def get_dim(path):
 
 
 def extract_audio(video_path, ss=None, dur=None, out="audio.f32"):
+    """float32 mono @16k. Videos with no audio track give an empty array (no crash)."""
+    if not has_audio(video_path):
+        return np.zeros(0, dtype=np.float32)
     cmd = [ffmpeg_exe(), "-y", "-loglevel", "error"]
     if ss is not None:
         cmd += ["-ss", str(ss)]
@@ -89,7 +148,7 @@ def extract_audio(video_path, ss=None, dur=None, out="audio.f32"):
     if dur is not None:
         cmd += ["-t", str(dur)]
     cmd += ["-vn", "-ac", "1", "-ar", "16000", "-f", "f32le", out]
-    subprocess.run(cmd, check=True)
+    _run(cmd)
     return np.fromfile(out, dtype=np.float32)
 
 
@@ -100,20 +159,40 @@ def extract_frame(video_path, t, out="frame.jpg", width=None):
     if width:
         cmd += ["-vf", f"scale={width}:-2"]
     cmd += ["-q:v", "4", out]
-    subprocess.run(cmd, check=True)
+    _run(cmd)
     return out
 
 
 # -------------------------------------------------------- transcription ----
-def transcribe(audio, model_size="small", language=None, model=None, progress=None):
+_MODELS = {}
+_MODEL_LOCK = threading.Lock()
+
+
+def get_model(model_size="small"):
+    """Load a Whisper model ONCE per process and reuse it (loading is the slow part)."""
+    with _MODEL_LOCK:
+        if model_size not in _MODELS:
+            from faster_whisper import WhisperModel
+            _MODELS[model_size] = WhisperModel(
+                model_size, device="cpu", compute_type="int8",
+                cpu_threads=os.cpu_count() or 4, num_workers=1)
+        return _MODELS[model_size]
+
+
+def transcribe(audio, model_size="small", language=None, model=None, progress=None, beam_size=1):
     """audio: float32 mono @16k. Returns (segments, info).
 
+    beam_size=1 (greedy) is ~2-3x faster than the default 5 with very little quality loss.
     progress: optional callable(fraction 0..1) fired as segments arrive.
     """
-    if model is None:
-        from faster_whisper import WhisperModel
-        model = WhisperModel(model_size, device="cpu", compute_type="int8")
-    segs, info = model.transcribe(audio, language=language, vad_filter=True, word_timestamps=True)
+    if audio is None or len(audio) < 1600:          # < 0.1 s -> nothing to transcribe
+        return [], None
+    model = model or get_model(model_size)
+    segs, info = model.transcribe(
+        audio, language=language, vad_filter=True,
+        vad_parameters={"min_silence_duration_ms": 500},
+        word_timestamps=True, beam_size=int(beam_size), best_of=1, temperature=0.0,
+        condition_on_previous_text=False)
     total = (len(audio) / 16000.0) or 1.0
     out = []
     for s in segs:
@@ -135,7 +214,11 @@ def find_clips(segments, min_dur=20, max_dur=60, k=2, smooth=2, cutoff=0.5, max_
     segs = [s for s in segments if s["text"].strip()]
     if len(segs) < 4:
         return [(segs[0]["start"], segs[-1]["end"])] if segs else []
-    X = TfidfVectorizer(stop_words="english").fit_transform([s["text"].strip() for s in segs]).toarray()
+    texts = [s["text"].strip() for s in segs]
+    try:
+        X = TfidfVectorizer(token_pattern=r"(?u)\b\w\w+\b").fit_transform(texts).toarray()
+    except ValueError:                      # empty vocabulary -> just cut evenly
+        X = np.eye(len(segs))
     n = X.shape[0]
 
     def pool(idx):
@@ -251,7 +334,8 @@ def write_ass(path, segments, s, e, W, H, S):
     anim = ANIMS.get(S["caption_anim"], "")
     body = ""
     if S["overlay_text"].strip():
-        body += f"Dialogue: 0,0:00:00.00,{_ass_ts(e - s)},Overlay,,0,0,0,,{S['overlay_text'].strip()}\n"
+        ov = S["overlay_text"].strip().replace("{", "(").replace("}", ")").replace("\n", "\\N")
+        body += f"Dialogue: 0,0:00:00.00,{_ass_ts(e - s)},Overlay,,0,0,0,,{ov}\n"
     if S["caption_style"] != "none":
         clip_segs = [x for x in segments if x["end"] > s and x["start"] < e]
         words = []
@@ -289,11 +373,16 @@ def frame_graph(S):
     if S["mode"] == "full_video":
         return "[0:v]null[o]"
     if S["slow_zoom"]:
-        return ("[0:v]scale=2160:3840,zoompan=z='min(1.10,1+0.0006*on)':d=1:"
+        # cover-crop to 9:16 first (old code stretched the picture), then zoom slowly
+        return ("[0:v]scale=1296:2304:force_original_aspect_ratio=increase,crop=1296:2304,"
+                "zoompan=z='min(1.10,1+0.0006*on)':d=1:"
                 "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30[o]")
     if S["frame_mode"] == "fit_blur":
+        # blur a tiny copy and scale it up: looks the same, ~10x cheaper than blurring 1080x1920
+        sigma = max(0.5, float(S.get("blur_strength", 30)) / 4.0)
         return ("[0:v]split=2[v1][v2];"
-                f"[v1]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma={int(S.get('blur_strength',30))}[bg];"
+                "[v1]scale=270:480:force_original_aspect_ratio=increase,crop=270:480,"
+                f"gblur=sigma={sigma:.2f},scale=1080:1920[bg];"
                 "[v2]scale=1080:1920:force_original_aspect_ratio=decrease[fg];"
                 "[bg][fg]overlay=(W-w)/2:(H-h)/2[o]")
     if S["frame_mode"] == "fit_color":
@@ -325,9 +414,12 @@ def audio_graph(fc, S):
 
 
 # ------------------------------------------------------------- render -----
-def render_segment(video_path, segments, s, e, out_path, S, font_dir):
+def render_segment(video_path, segments, s, e, out_path, S, font_dir, preset="veryfast", threads=None):
     """Render one output file covering [s, e] with the given settings."""
     dur = e - s
+    S = dict(S)
+    if not has_audio(video_path):
+        S["original_audio"] = "mute"
     W, H = (1080, 1920) if S["mode"] == "reels" else get_dim(video_path)
     fc = frame_graph(S)
     if S["caption_style"] != "none" or S["overlay_text"].strip():
@@ -336,7 +428,10 @@ def render_segment(video_path, segments, s, e, out_path, S, font_dir):
         fc += f";[o]ass={ass}:fontsdir={font_dir}[o]"
     if S["mode"] == "reels":
         if S["progress_bar"]:
-            fc += f";[o]drawbox=x=0:y=0:w=iw*t/{dur:.2f}:h=18:color={S.get('progress_color', S['border_color']).replace('#','0x')}@1:t=fill[o]"
+            # drawbox cannot animate (its `t` means thickness); slide a coloured strip instead
+            pc = S.get("progress_color", S["border_color"]).replace("#", "0x")
+            fc += (f";color=c={pc}:s=1080x18:r=30:d={dur:.2f}[bar]"
+                   f";[o][bar]overlay=x='-w+w*t/{dur:.2f}':y=0:shortest=1[o]")
         if S["border"]:
             fc += f";[o]drawbox=x=0:y=0:w=iw:h=ih:color={S['border_color'].replace('#','0x')}@1:t={S['border_width']}[o]"
     if S.get("fade", False) and dur > 2:
@@ -350,13 +445,16 @@ def render_segment(video_path, segments, s, e, out_path, S, font_dir):
     if music:
         cmd += ["-ss", str(s), "-stream_loop", "-1", "-i", music]
     cmd += ["-t", str(dur), "-filter_complex", fc] + maps + \
-           ["-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p"] + acodec
+           ["-c:v", "libx264", "-preset", preset, "-crf", "23", "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart"] + acodec
     if music and S["mode"] == "full_video":
         cmd += ["-shortest"]
+    if threads:
+        cmd += ["-threads", str(int(threads))]
     cmd += [out_path]
     try:
-        subprocess.run(cmd, check=True)
-    except subprocess.CalledProcessError:
+        _run(cmd)
+    except RuntimeError:
         # last-resort fallback: no effects, original audio
         fb = [ffmpeg_exe(), "-y", "-loglevel", "error", "-ss", str(s), "-i", video_path, "-t", str(dur)]
         if S["mode"] == "reels":
@@ -364,5 +462,5 @@ def render_segment(video_path, segments, s, e, out_path, S, font_dir):
         fb += ["-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p"]
         fb += (["-c:a", "aac"] if S["original_audio"] == "keep" else ["-an"])
         fb += [out_path]
-        subprocess.run(fb, check=True)
+        _run(fb)
     return out_path

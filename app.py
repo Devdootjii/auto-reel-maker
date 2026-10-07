@@ -38,108 +38,132 @@ st.set_page_config(page_title="Auto Reels Studio", page_icon="🎬", layout="wid
 
 # ===================================================================== CSS ====
 CSS = """
-:root{--bg:#0c0e13;--panel:#13161d;--panel2:#181c25;--field:#0f1218;--line:#232836;--line2:#2f3547;
-  --text:#e8eaf0;--muted:#8a91a6;--accent:#7c5cf0;--accent2:#9279ff;--ok:#34c38f;--bad:#ef5b5b;}
+:root{--bg:#07090e;--panel:rgba(16,19,27,.66);--panel2:#181c26;--field:#0e1117;--line:#232836;--line2:#323a50;
+  --text:#e8eaf0;--muted:#8d95aa;--accent:#7c5cf0;--accent2:#9279ff;--ok:#34c38f;--bad:#ef5b5b;}
 
-html,body,.stApp,[data-testid="stAppViewContainer"],[data-testid="stMain"]{
-  height:100vh;overflow:hidden !important;background:var(--bg) !important;}
+/* full-window app: root font scales with the screen so options stay compact */
+html{font-size:clamp(11.5px,.92vw,14.5px) !important;}
+html,body,.stApp{height:100vh;overflow:hidden !important;background:var(--bg) !important;}
+[data-testid="stAppViewContainer"],[data-testid="stMain"]{height:100vh;overflow:hidden !important;
+  background:transparent !important;position:relative;z-index:1;}
 .stApp{font-family:Inter,"Segoe UI",system-ui,-apple-system,sans-serif;color:var(--text);}
 header[data-testid="stHeader"],[data-testid="stToolbar"],[data-testid="stDecoration"],
 #MainMenu,footer{display:none !important;}
-.block-container{padding:12px 20px 0 20px !important;max-width:100% !important;}
-[data-testid="stVerticalBlock"]{gap:.5rem !important;}
-[data-testid="stHorizontalBlock"]{gap:.9rem !important;}
+.block-container{padding:10px 16px 0 16px !important;max-width:100% !important;}
+[data-testid="stVerticalBlock"]{gap:.45rem !important;}
+[data-testid="stHorizontalBlock"]{gap:.7rem !important;}
 @media (max-width:900px){html,body,.stApp,[data-testid="stAppViewContainer"],[data-testid="stMain"]
   {height:auto;overflow:auto !important;}}
 
-/* ---------- header ---------- */
-.brand{display:flex;align-items:center;gap:12px;}
-.logo{width:36px;height:36px;border-radius:10px;background:var(--accent);display:flex;align-items:center;
-  justify-content:center;color:#fff;font-weight:700;font-size:.85rem;letter-spacing:.02em;}
-.bt{font-size:1.02rem;font-weight:650;color:var(--text);line-height:1.2;}
-.bs{font-size:.74rem;color:var(--muted);line-height:1.3;}
-.chip{display:inline-block;background:var(--panel2);border:1px solid var(--line);border-radius:7px;
-  padding:1px 8px;margin-right:5px;font-size:.7rem;color:#c5cadb;}
-.st-key-upbox{height:46px;overflow:hidden;}
-.st-key-upbox [data-testid="stFileUploaderDropzone"]{padding:4px 12px !important;min-height:0 !important;
-  height:44px;flex-direction:row;align-items:center;background:var(--field);
-  border:1px dashed var(--line2);border-radius:10px;}
-.st-key-upbox [data-testid="stFileUploaderDropzoneInstructions"] small,
-.st-key-upbox [data-testid="stFileUploaderDropzoneInstructions"] svg{display:none !important;}
-.st-key-upbox [data-testid="stFileUploaderDropzoneInstructions"] span{font-size:.78rem;color:var(--muted);}
-.st-key-upbox button{min-height:30px !important;padding:0 12px !important;font-size:.78rem !important;}
+/* ---------- aurora background (transform-only animation = cheap on the GPU) ---------- */
+.stApp::before,.stApp::after{content:"";position:fixed;z-index:0;pointer-events:none;will-change:transform;}
+.stApp::before{inset:-25%;background:
+  radial-gradient(34% 30% at 18% 32%,rgba(124,92,240,.46),transparent 70%),
+  radial-gradient(30% 26% at 80% 20%,rgba(34,211,238,.30),transparent 70%),
+  radial-gradient(34% 30% at 62% 82%,rgba(52,211,153,.28),transparent 70%);
+  animation:aur1 30s ease-in-out infinite alternate;}
+.stApp::after{inset:-30%;background:linear-gradient(115deg,transparent 28%,rgba(52,211,153,.17) 40%,
+  rgba(124,92,240,.22) 52%,rgba(34,211,238,.15) 61%,transparent 73%);filter:blur(34px);
+  animation:aur2 38s ease-in-out infinite alternate;}
+@keyframes aur1{0%{transform:translate3d(-3%,-2%,0) rotate(0) scale(1)}
+  50%{transform:translate3d(4%,3%,0) rotate(6deg) scale(1.12)}100%{transform:translate3d(-2%,5%,0) rotate(-4deg) scale(1.05)}}
+@keyframes aur2{from{transform:translate3d(-7%,0,0) skewX(-9deg)}to{transform:translate3d(7%,-3%,0) skewX(9deg)}}
+@media (prefers-reduced-motion:reduce){.stApp::before,.stApp::after{animation:none !important;}}
 
-/* ---------- panels ---------- */
-.st-key-p_left,.st-key-p_center,.st-key-p_right{background:var(--panel);border:1px solid var(--line);
-  border-radius:14px;padding:14px 16px 12px 16px;max-height:calc(100vh - 160px);overflow-y:auto;}
-.st-key-p_left::-webkit-scrollbar,.st-key-p_right::-webkit-scrollbar{width:6px;}
-.st-key-p_left::-webkit-scrollbar-thumb,.st-key-p_right::-webkit-scrollbar-thumb{background:var(--line2);
-  border-radius:6px;}
-.st-key-p_center{overflow:hidden;}
-.sec{font-size:.78rem;color:var(--muted);margin:2px 0 4px 0;}
-.hint{font-size:.72rem;color:var(--muted);}
+/* ---------- top app bar ---------- */
+.brand{display:flex;align-items:center;gap:.8rem;}
+.logo{width:2.5rem;height:2.5rem;border-radius:.7rem;background:linear-gradient(135deg,#7c5cf0,#3ec6a8);
+  display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.9rem;
+  box-shadow:0 6px 18px rgba(124,92,240,.35);}
+.bt{font-size:1.1rem;font-weight:650;line-height:1.15;}
+.bs{font-size:.76rem;color:var(--muted);line-height:1.3;margin-top:2px;}
+.chip{display:inline-block;background:rgba(24,28,38,.9);border:1px solid var(--line);border-radius:.45rem;
+  padding:1px .55rem;margin-right:.3rem;font-size:.72rem;color:#c5cadb;}
+
+/* ---------- panels: equal height, fill the window ---------- */
+.st-key-p_nav,.st-key-p_left,.st-key-p_center,.st-key-p_right{background:var(--panel);
+  border:1px solid var(--line);border-radius:.9rem;padding:.8rem .9rem;height:calc(100vh - 10.2rem);
+  overflow-y:auto;box-shadow:0 10px 30px rgba(0,0,0,.28);}
+.st-key-p_center{overflow:hidden;container-type:inline-size;}
+.st-key-p_nav{padding:.6rem .5rem;}
+[class*="st-key-p_"]::-webkit-scrollbar{width:6px;}
+[class*="st-key-p_"]::-webkit-scrollbar-thumb{background:var(--line2);border-radius:6px;}
+.ptitle{font-size:.95rem;font-weight:650;margin:0 0 .15rem 0;}
+.hint{font-size:.72rem;color:var(--muted);line-height:1.4;}
+.navcap{font-size:.62rem;letter-spacing:.08em;color:var(--muted);padding:0 .6rem .35rem .6rem;}
+
+/* left nav rail */
+.st-key-p_nav [role="radiogroup"]{gap:.15rem;flex-direction:column;}
+.st-key-p_nav label[data-baseweb="radio"]{width:100%;margin:0;padding:.5rem .65rem;border-radius:.55rem;
+  cursor:pointer;color:var(--muted);transition:background .15s,color .15s;}
+.st-key-p_nav label[data-baseweb="radio"]>div:first-child{display:none !important;}
+.st-key-p_nav label[data-baseweb="radio"]:hover{background:rgba(124,92,240,.10);color:var(--text);}
+.st-key-p_nav label[data-baseweb="radio"]:has(input:checked){background:rgba(124,92,240,.20);color:#fff;
+  box-shadow:inset 3px 0 0 var(--accent);}
+.st-key-p_nav label[data-baseweb="radio"] p{font-size:.84rem !important;color:inherit !important;
+  font-weight:560 !important;}
 
 /* ---------- widgets (compact) ---------- */
 [data-testid="stWidgetLabel"]{min-height:0 !important;margin-bottom:1px !important;}
-[data-testid="stWidgetLabel"] p,label p{font-size:.74rem !important;color:var(--muted) !important;
-  font-weight:500 !important;}
-div[data-baseweb="select"]>div{min-height:34px !important;background:var(--field) !important;
-  border-color:var(--line) !important;font-size:.82rem !important;border-radius:9px !important;}
-.stTextInput input,.stNumberInput input{min-height:34px !important;font-size:.82rem !important;
-  background:var(--field) !important;border-radius:9px !important;}
+[data-testid="stWidgetLabel"] p,label p{font-size:.72rem !important;color:var(--muted) !important;font-weight:500 !important;}
+div[data-baseweb="select"]>div{min-height:2rem !important;background:var(--field) !important;
+  border-color:var(--line) !important;font-size:.8rem !important;border-radius:.55rem !important;}
+.stTextInput input,.stNumberInput input{min-height:2rem !important;font-size:.8rem !important;
+  background:var(--field) !important;border-radius:.55rem !important;}
 [data-testid="stSlider"]{padding-top:0 !important;}
 [data-testid="stSliderTickBarMin"],[data-testid="stSliderTickBarMax"]{display:none !important;}
-[data-testid="stSliderThumbValue"]{font-size:.72rem !important;}
-[data-testid="stColorPicker"]>div{gap:.5rem;}
-.stCheckbox{padding:6px 0 0 0;}
+[data-testid="stSliderThumbValue"]{font-size:.7rem !important;}
+.stCheckbox{padding:.35rem 0 0 0;}
 .stCheckbox p{font-size:.8rem !important;color:var(--text) !important;}
-[data-testid="stExpander"]{border:1px solid var(--line) !important;border-radius:10px !important;
-  background:var(--panel2);}
-[data-testid="stExpander"] summary{font-size:.8rem !important;padding:6px 10px !important;}
+[data-testid="stExpander"]{border:1px solid var(--line) !important;border-radius:.6rem !important;background:rgba(24,28,38,.7);}
+[data-testid="stExpander"] summary{font-size:.8rem !important;padding:.35rem .6rem !important;}
 code{font-size:.72rem !important;}
 
 .stButton,.stDownloadButton,[data-testid="stPopover"]{width:100%;}
-.stButton>button,.stDownloadButton>button,[data-testid="stPopover"] button{width:100%;min-height:38px;border-radius:10px;font-size:.82rem;
-  font-weight:600;border:1px solid var(--line2);background:var(--panel2);color:var(--text);
-  transition:border-color .15s,background .15s;}
-.stButton>button:hover,.stDownloadButton>button:hover{border-color:var(--accent);color:#fff;
-  background:#1d2230;}
+.stButton>button,.stDownloadButton>button,[data-testid="stPopover"] button{width:100%;min-height:2.2rem;
+  padding:.15rem .6rem;border-radius:.6rem;font-size:.8rem;font-weight:600;border:1px solid var(--line2);
+  background:rgba(24,28,38,.9);color:var(--text);transition:border-color .15s,background .15s;}
+.stButton>button:hover,.stDownloadButton>button:hover,[data-testid="stPopover"] button:hover{
+  border-color:var(--accent);color:#fff;background:#1e2331;}
 .stButton>button[kind="primary"],.stButton>button[data-testid="stBaseButton-primary"]{
-  background:var(--accent);border-color:var(--accent);color:#fff;}
-.stButton>button[kind="primary"]:hover,.stButton>button[data-testid="stBaseButton-primary"]:hover{
-  background:var(--accent2);border-color:var(--accent2);}
-.stButton>button:disabled,.stDownloadButton>button:disabled{opacity:.4;}
+  background:linear-gradient(135deg,#7c5cf0,#5b6cf0);border-color:transparent;color:#fff;
+  box-shadow:0 6px 18px rgba(124,92,240,.35);}
+.stButton>button[kind="primary"]:hover,.stButton>button[data-testid="stBaseButton-primary"]:hover{filter:brightness(1.12);}
+.stButton>button:disabled,.stDownloadButton>button:disabled{opacity:.38;}
 
 [data-testid="stSegmentedControl"]{width:100%;}
-[data-testid="stSegmentedControl"] button{font-size:.76rem !important;padding:3px 10px !important;
-  min-height:30px !important;}
-[data-baseweb="tab-list"]{gap:4px;}
-[data-baseweb="tab"]{height:34px;font-size:.8rem;}
+[data-testid="stSegmentedControl"] button{font-size:.76rem !important;padding:.15rem .6rem !important;min-height:1.9rem !important;}
+[data-baseweb="tab-list"]{gap:.25rem;}
+[data-baseweb="tab"]{height:2.1rem;font-size:.8rem;}
 
 /* ---------- fixed action bar ---------- */
-.st-key-actionbar{position:fixed;left:0;right:0;bottom:0;z-index:60;background:rgba(12,14,19,.97);
-  border-top:1px solid var(--line);padding:9px 20px 10px 20px;}
+.st-key-actionbar{position:fixed;left:0;right:0;bottom:0;z-index:60;background:rgba(9,11,16,.92);
+  border-top:1px solid var(--line);padding:.55rem 16px .6rem 16px;}
+@media (min-width:900px){.st-key-actionbar{padding-right:190px;}}   /* room for the host's "Manage app" badge */
 .stat{font-size:.78rem;color:var(--muted);}
-.stat b{color:var(--text);font-weight:600;}
 .stat.ok{color:var(--ok);} .stat.bad{color:var(--bad);}
 .st-key-actionbar [data-testid="stProgress"] p{font-size:.74rem;}
 
 /* ---------- empty state ---------- */
-.hero{margin:6vh auto 0 auto;max-width:760px;text-align:center;}
-.hero h1{font-size:1.7rem;font-weight:650;margin:0 0 6px 0;color:var(--text);}
-.hero p{color:var(--muted);font-size:.92rem;margin:0 0 22px 0;}
-.steps{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;}
-.step{flex:1 1 200px;max-width:240px;background:var(--panel);border:1px solid var(--line);
-  border-radius:12px;padding:14px 16px;text-align:left;}
-.step b{display:block;font-size:.88rem;margin-bottom:3px;color:var(--text);}
+.hero{margin:5vh auto 1rem auto;max-width:720px;text-align:center;}
+.hero h1{font-size:1.9rem;font-weight:680;margin:0 0 .35rem 0;letter-spacing:-.01em;}
+.hero p{color:var(--muted);font-size:.95rem;margin:0;}
+.st-key-herobox{max-width:640px;margin:0 auto;}
+.st-key-herobox [data-testid="stFileUploaderDropzone"]{padding:1.6rem 1rem !important;
+  background:rgba(14,17,23,.75);border:1.5px dashed var(--line2);border-radius:1rem;}
+.st-key-herobox [data-testid="stFileUploaderDropzone"]:hover{border-color:var(--accent);}
+.steps{display:flex;gap:.8rem;justify-content:center;flex-wrap:wrap;max-width:760px;margin:1.2rem auto 0 auto;}
+.step{flex:1 1 190px;max-width:240px;background:var(--panel);border:1px solid var(--line);border-radius:.8rem;
+  padding:.8rem 1rem;text-align:left;}
+.step b{display:block;font-size:.88rem;margin-bottom:.15rem;}
 .step span{font-size:.78rem;color:var(--muted);}
-.guide h4{color:#c9b8ff;margin:8px 0 3px 0;font-size:.88rem;}
+.guide h4{color:#c9b8ff;margin:.5rem 0 .2rem 0;font-size:.88rem;}
 .guide li,.guide p{color:#c3c7db;font-size:.8rem;margin-bottom:2px;}
 
 /* ---------- phone preview (scales with window height) ---------- */
-.phone{--ph:clamp(300px,calc(100vh - 262px),700px);position:relative;height:var(--ph);
-  width:calc(var(--ph)*.573);margin:6px auto 0 auto;border-radius:calc(var(--ph)*.075);
-  background:#1b1e29;border:1px solid #333a4f;box-shadow:0 14px 40px rgba(0,0,0,.55);}
+.phone{--ph:clamp(240px,min(calc(100vh - 17rem),calc((100cqw - 1.8rem) / .573)),780px);position:relative;height:var(--ph);
+  width:calc(var(--ph)*.573);margin:.5rem auto 0 auto;border-radius:calc(var(--ph)*.075);
+  background:#1b1e29;border:1px solid #38405a;box-shadow:0 18px 50px rgba(0,0,0,.6),0 0 0 1px rgba(124,92,240,.12);}
 .phone-screen{position:absolute;inset:calc(var(--ph)*.012);border-radius:calc(var(--ph)*.064);
   overflow:hidden;background:#000;container-type:size;}
 .island{position:absolute;top:1.1cqh;left:50%;transform:translateX(-50%);width:24cqw;height:2.6cqh;
@@ -191,7 +215,7 @@ DEFAULTS = dict(mode="reels", language="auto", model_size="small", accuracy="fas
                 crop_y=0.5, border=False, border_color="#FFD400", border_width=14,
                 overlay_text="", overlay_pos="top", overlay_color="#FFD400", overlay_size=54,
                 original_audio="keep", original_volume=1.0, music_volume=0.15, min_dur=20, max_dur=60,
-                max_clips=0, workers=2, preview_mode="frame", privacy="private")
+                max_clips=0, workers=0, preview_mode="frame", privacy="private")
 
 SETTINGS_FILE = os.path.join(WORK, "settings.json")
 FONT_FILES = {"Poppins": "Poppins-Bold.ttf", "Anton": "Anton-Regular.ttf", "Montserrat": "Montserrat.ttf",
@@ -201,10 +225,10 @@ GUIDE = """
 <div class="guide">
 <h4>How to use</h4>
 <ol>
-<li><b>Upload</b> a video (top right).</li>
-<li><b>Tune</b> it — pick a section on the left (Frame, Captions, Motion, Colors, Audio, Clips).</li>
+<li><b>Upload</b> one or more videos on the start screen.</li>
+<li><b>Tune</b> it — pick a section in the left menu (Frame, Captions, Motion, Colors, Audio, Clips).</li>
 <li><b>Preview</b> in the phone. It shows a real frame of your video with your settings.
-Use <i>Video sample</i> for a real 5-second render.</li>
+Use <i>Sample</i> + <i>Render</i> for a real 5-second clip.</li>
 <li><b>Generate</b> (bottom bar) — transcribes and renders. Then <b>Download</b> or publish.</li>
 </ol>
 <h4>Good defaults</h4>
@@ -214,7 +238,7 @@ Use <i>Video sample</i> for a real 5-second render.</li>
 <li><b>Whisper model</b>: <code>small</code>. <b>Transcription</b>: <code>fast</code> (use <code>accurate</code> only if needed).</li>
 <li><b>Frame mode</b>: <code>fit_blur</code> for screen recordings.</li>
 </ul>
-<p>Settings save automatically. Reset is on the General section.</p>
+<p>Settings save automatically. <b>New video</b> (top right) removes the current upload and results so you can start again.</p>
 </div>
 """
 
@@ -500,19 +524,73 @@ def phone_html(Sx, frame=None, words=None, video=None):
             % (layers, extra))
 
 
-# ============================================================== google helpers ====
-def load_creds(token_path, scopes):
-    if not os.path.exists(token_path):
+# ============================================================== google login ====
+G_YT = "https://www.googleapis.com/auth/youtube.upload"
+G_DR = "https://www.googleapis.com/auth/drive.file"
+G_SCOPES = [G_YT, G_DR]                       # ONE login covers YouTube + Drive
+G_TOKEN = os.path.join(WORK, "google_token.json")
+G_LEGACY = [os.path.join(WORK, "yt_token.json"), os.path.join(WORK, "drive_token.json")]
+CS_PATH = os.path.join(WORK, "client_secret.json")
+
+
+def _secret(name):
+    try:
+        return st.secrets.get(name)
+    except Exception:
         return None
+
+
+def client_secret_path():
+    """Saved file -> or Streamlit secret GOOGLE_CLIENT_SECRET -> or None. Never asks twice."""
+    if os.path.exists(CS_PATH):
+        return CS_PATH
+    v = _secret("GOOGLE_CLIENT_SECRET")
+    if v:
+        try:
+            with open(CS_PATH, "w") as f:
+                f.write(v if isinstance(v, str) else json.dumps(v.to_dict()))
+            return CS_PATH
+        except Exception:
+            return None
+    return None
+
+
+def load_google_creds():
+    """Saved token file -> or secret GOOGLE_TOKEN -> or old yt/drive token. Refreshes silently."""
     try:
         from google.oauth2.credentials import Credentials
         from google.auth.transport.requests import Request
-        c = Credentials.from_authorized_user_file(token_path, scopes)
-        if c.expired and c.refresh_token:
-            c.refresh(Request())
-        return c if c.valid else None
-    except Exception:
+    except ImportError:
         return None
+    sources = []
+    if os.path.exists(G_TOKEN):
+        sources.append(("file", G_TOKEN))
+    if _secret("GOOGLE_TOKEN"):
+        sources.append(("secret", None))
+    sources += [("file", p) for p in G_LEGACY if os.path.exists(p)]
+    for kind, path in sources:
+        try:
+            if kind == "file":
+                c = Credentials.from_authorized_user_file(path)
+            else:
+                v = _secret("GOOGLE_TOKEN")
+                c = Credentials.from_authorized_user_info(json.loads(v) if isinstance(v, str) else v.to_dict())
+            if c.refresh_token and not c.valid:
+                c.refresh(Request())
+            if c.valid:
+                if path != G_TOKEN:
+                    with open(G_TOKEN, "w") as f:
+                        f.write(c.to_json())
+                return c
+        except Exception:
+            continue
+    return None
+
+
+def google_creds():
+    if st.session_state.get("g_creds") is None:
+        st.session_state["g_creds"] = load_google_creds()
+    return st.session_state["g_creds"]
 
 
 def extract_code(text):
@@ -521,37 +599,85 @@ def extract_code(text):
     return unquote(m.group(1)) if m else text
 
 
-def google_connect(name, scopes, token_path, ck):
-    """Manual-code OAuth flow (works on hosted Streamlit, where localhost redirect can't be caught)."""
-    if ck not in st.session_state:
-        st.session_state[ck] = load_creds(token_path, scopes)
-    if st.session_state[ck]:
-        st.markdown(f"<span class='stat ok'>{name} connected</span>", unsafe_allow_html=True)
-        return
-    cs = st.session_state.get("cs_path")
-    if not cs:
-        st.markdown(f"<span class='hint'>Upload client_secret.json above first.</span>", unsafe_allow_html=True)
-        return
-    if st.button(f"Get {name} link", key=f"get_{ck}"):
-        from google_auth_oauthlib.flow import Flow
-        flow = Flow.from_client_secrets_file(cs, scopes=scopes, redirect_uri="http://localhost:8080/")
-        url, _ = flow.authorization_url(prompt="consent", access_type="offline")
-        st.session_state[ck + "_flow"], st.session_state[ck + "_url"] = flow, url
-    if st.session_state.get(ck + "_url"):
-        st.markdown(f"[1 · Open & approve]({st.session_state[ck + '_url']})  \n"
-                    "<span class='hint'>2 · Copy the code (or whole URL) from the address bar after redirect.</span>",
+def _make_flow():
+    from google_auth_oauthlib.flow import Flow
+    try:
+        return Flow.from_client_secrets_file(client_secret_path(), scopes=G_SCOPES,
+                                             redirect_uri="http://localhost:8080/",
+                                             autogenerate_code_verifier=False)
+    except TypeError:
+        return Flow.from_client_secrets_file(client_secret_path(), scopes=G_SCOPES,
+                                             redirect_uri="http://localhost:8080/")
+
+
+def google_disconnect():
+    for p in [G_TOKEN] + G_LEGACY:
+        try:
+            os.remove(p)
+        except OSError:
+            pass
+    st.session_state["g_creds"] = None
+    st.session_state.pop("g_url", None)
+
+
+def publish_panel():
+    creds = google_creds()
+    if creds:
+        yt_ok, dr_ok = creds.has_scopes([G_YT]), creds.has_scopes([G_DR])
+        st.markdown("<span class='stat ok'>Google connected</span> &nbsp;<span class='chip'>YouTube %s</span>"
+                    "<span class='chip'>Drive %s</span>" % ("✓" if yt_ok else "–", "✓" if dr_ok else "–"),
                     unsafe_allow_html=True)
-        code = st.text_input("Code", key=f"code_{ck}", placeholder="paste code or full URL")
-        if st.button(f"Connect {name}", key=f"con_{ck}") and code.strip():
+        _seed("privacy")
+        S["privacy"] = st.selectbox("YouTube privacy", ALLOWED["privacy"], key="w_privacy")
+        st.markdown("<span class='hint'>You stay signed in — no secret or code needed again.</span>",
+                    unsafe_allow_html=True)
+        if not (yt_ok and dr_ok):
+            st.markdown("<span class='hint'>Some access is missing. Disconnect and connect again to grant both.</span>",
+                        unsafe_allow_html=True)
+        with st.expander("Stay signed in after app restarts"):
+            st.markdown("<span class='hint'>Hosted apps wipe local files on reboot. To never sign in again, open "
+                        "<b>App → Settings → Secrets</b> and paste the two lines below.</span>",
+                        unsafe_allow_html=True)
+            cs = client_secret_path()
+            secret_text = ("GOOGLE_TOKEN = '''" + creds.to_json() + "'''\n"
+                           "GOOGLE_CLIENT_SECRET = '''" + (open(cs).read().strip() if cs else "<paste client_secret.json>")
+                           + "'''")
+            st.code(secret_text, language="toml")
+        st.button("Disconnect Google", on_click=google_disconnect)
+        return
+
+    cs = client_secret_path()
+    if not cs:
+        up = st.file_uploader("client_secret.json (one time only)", type=["json"], key="cs")
+        if up is not None:
+            with open(CS_PATH, "wb") as f:
+                f.write(up.getbuffer())
+            st.rerun(scope="fragment")
+        st.markdown("<span class='hint'>Google Cloud → APIs → Credentials → OAuth client. Add "
+                    "<code>http://localhost:8080/</code> as redirect URI. Enable YouTube Data API + Drive API.</span>",
+                    unsafe_allow_html=True)
+        return
+    st.markdown("<span class='hint'>client_secret.json is saved. Sign in once:</span>", unsafe_allow_html=True)
+    if st.button("Get Google sign-in link"):
+        flow = _make_flow()
+        st.session_state["g_url"], _ = flow.authorization_url(prompt="consent", access_type="offline")
+    if st.session_state.get("g_url"):
+        st.markdown(f"**1.** [Open Google & approve]({st.session_state['g_url']})  \n"
+                    "<span class='hint'>**2.** The page may say 'can't connect' — that's fine. Copy the whole "
+                    "address from the browser bar and paste below.</span>", unsafe_allow_html=True)
+        code = st.text_input("Code or full URL", key="g_code", placeholder="http://localhost:8080/?code=…")
+        if st.button("Connect", key="g_connect") and code.strip():
             try:
-                flow = st.session_state[ck + "_flow"]
+                flow = _make_flow()
                 flow.fetch_token(code=extract_code(code))
-                st.session_state[ck] = flow.credentials
-                with open(token_path, "w") as f:
+                with open(G_TOKEN, "w") as f:
                     f.write(flow.credentials.to_json())
-                st.rerun()
+                st.session_state["g_creds"] = flow.credentials
+                st.session_state.pop("g_url", None)
             except Exception as e:
-                st.error(f"Connect failed: {e}")
+                st.error(f"Connect failed: {str(e)[:160]}. Press 'Get sign-in link' again.")
+                return
+            st.rerun(scope="fragment")
 
 
 # =================================================================== panels ====
@@ -578,7 +704,7 @@ def tab_frame():
         sld("crop_zoom", "Zoom", 1.0, 3.0, 0.1, c1)
         sld("crop_x", "Crop X", 0.0, 1.0, 0.05, c2)
         sld("crop_y", "Crop Y", 0.0, 1.0, 0.05, c1)
-    st.markdown("<div class='sec'>Border</div>", unsafe_allow_html=True)
+    st.markdown("<div class='hint' style='margin-top:.4rem'>Border</div>", unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     chk("border", "Show border", c1)
     if S["border"]:
@@ -651,9 +777,11 @@ def tab_clips():
     num("min_dur", "Min clip (s)", 5, 300, c1)
     num("max_dur", "Max clip (s)", 10, 600, c2)
     num("max_clips", "Max clips (0 = all)", 0, 100, c1)
-    num("workers", "Parallel renders", 1, 8, c2)
-    st.markdown("<span class='hint'>Clips are cut at topic changes inside your min/max range.</span>",
-                unsafe_allow_html=True)
+    num("workers", "Parallel jobs (0 = auto)", 0, 8, c2)
+    cpu = os.cpu_count() or 2
+    st.markdown(f"<span class='hint'>Clips render in parallel, and the next video is transcribed while earlier "
+                f"ones render. Auto uses {max(1, min(4, cpu))} job(s) on this server "
+                f"({cpu} CPU core{'s' if cpu != 1 else ''}).</span>", unsafe_allow_html=True)
 
 
 TAB_FN = {"General": tab_general, "Frame": tab_frame, "Captions": tab_captions, "Motion": tab_motion,
@@ -662,11 +790,11 @@ TAB_FN = {"General": tab_general, "Frame": tab_frame, "Captions": tab_captions, 
 
 def panel_preview(primary, dur_total):
     Sx = build_settings()
-    top = st.columns([1.3, 1], vertical_alignment="center")
     _seed("preview_mode")
+    top = st.columns([1.25, 1], vertical_alignment="center")
     with top[0]:
         pm = st.segmented_control("Preview", ALLOWED["preview_mode"], key="w_preview_mode",
-                                  format_func=lambda x: "Frame" if x == "frame" else "Video sample",
+                                  format_func=lambda x: "Frame" if x == "frame" else "Sample",
                                   label_visibility="collapsed")
     S["preview_mode"] = pm or S["preview_mode"]
 
@@ -675,7 +803,7 @@ def panel_preview(primary, dur_total):
     try:
         frame = frame_uri(primary, t)
     except Exception as e:
-        st.warning(f"Could not read a frame: {e}")
+        st.warning(f"Could not read a frame: {str(e)[:120]}")
         return
     hindi = S["language"] in ("hi", "mr", "ne")
     fallback = ["आज", "हम", "बात", "करेंगे"] if hindi else ["Here", "is", "how", "it", "works"]
@@ -684,23 +812,24 @@ def panel_preview(primary, dur_total):
         sig = json.dumps({**{k: v for k, v in Sx.items() if k not in ("preview_mode", "privacy")},
                           "mode": "reels"}, sort_keys=True)
         with top[1]:
-            go = st.button("Render sample", key="btn_pv")
+            go = st.button("Render", key="btn_pv")
         if go:
+            st.session_state.pop("pv_err", None)
             with st.spinner("Rendering 5 s sample…"):
                 try:
                     st.session_state["pv"] = (sig, preview_video_b64(primary, 0.0, 5.0, sig))
                 except Exception as e:
-                    st.error(f"Sample failed: {e}")
+                    st.session_state["pv_err"] = str(e)[:240]
         pv = st.session_state.get("pv")
-        if pv:
-            slot.markdown(phone_html(Sx, video=pv[1]), unsafe_allow_html=True)
-            if pv[0] != sig:
-                st.markdown("<span class='hint'>Settings changed — render again to refresh.</span>",
-                            unsafe_allow_html=True)
-        else:
-            slot.markdown(phone_html(Sx, frame, fallback), unsafe_allow_html=True)
-            st.markdown("<span class='hint'>Press “Render sample” for a real 5-second clip.</span>",
+        slot.markdown(phone_html(Sx, video=pv[1]) if pv else phone_html(Sx, frame, fallback),
+                      unsafe_allow_html=True)
+        if st.session_state.get("pv_err"):
+            st.markdown("<span class='stat bad'>Sample failed: %s</span>" % st.session_state["pv_err"],
                         unsafe_allow_html=True)
+        elif pv and pv[0] != sig:
+            st.markdown("<span class='hint'>Settings changed — press Render to refresh.</span>", unsafe_allow_html=True)
+        elif not pv:
+            st.markdown("<span class='hint'>Press Render for a real 5-second clip.</span>", unsafe_allow_html=True)
         return
 
     slot.markdown(phone_html(Sx, frame, fallback), unsafe_allow_html=True)      # instant
@@ -730,35 +859,24 @@ def panel_right():
             st.markdown("<span class='hint'>Titles, descriptions and hashtags for every generated "
                         "file will appear here after you press Generate.</span>", unsafe_allow_html=True)
     with t2:
-        cs = st.file_uploader("client_secret.json (Google OAuth)", type=["json"], key="cs")
-        if cs is not None:
-            cp = os.path.join(WORK, "client_secret.json")
-            with open(cp, "wb") as f:
-                f.write(cs.getbuffer())
-            st.session_state["cs_path"] = cp
-        with st.expander("YouTube"):
-            google_connect("YouTube", ["https://www.googleapis.com/auth/youtube.upload"],
-                           os.path.join(WORK, "yt_token.json"), "yt_creds")
-            _seed("privacy")
-            S["privacy"] = st.selectbox("Privacy", ALLOWED["privacy"], key="w_privacy")
-        with st.expander("Google Drive"):
-            google_connect("Drive", ["https://www.googleapis.com/auth/drive.file"],
-                           os.path.join(WORK, "drive_token.json"), "dr_creds")
-            st.markdown("<span class='hint'>Enable the Drive API for the same project.</span>",
-                        unsafe_allow_html=True)
+        publish_panel()
 
 
 @st.fragment
 def studio():
-    """Left: options · centre: phone · right: details/publish. Reruns on its own — fast."""
+    """Nav · options · phone · details. Reruns on its own — fast."""
     primary = st.session_state["primary"]
     dur_total = media_info(primary)["dur"]
-    left, center, right = st.columns([1.25, 0.85, 1.0], gap="medium")
+    nav, left, center, right = st.columns([0.36, 1.2, 0.9, 1.0], gap="small")
+    with nav:
+        with st.container(key="p_nav"):
+            st.markdown("<div class='navcap'>SETTINGS</div>", unsafe_allow_html=True)
+            st.session_state.setdefault("w_tab", "General")
+            st.radio("Section", TABS, key="w_tab", label_visibility="collapsed")
     with left:
         with st.container(key="p_left"):
-            st.session_state.setdefault("w_tab", "General")
-            st.segmented_control("Section", TABS, key="w_tab", label_visibility="collapsed")
             tab = st.session_state.get("w_tab") or "General"
+            st.markdown(f"<div class='ptitle'>{tab}</div>", unsafe_allow_html=True)
             TAB_FN[tab]()
     with center:
         with st.container(key="p_center"):
@@ -771,85 +889,114 @@ def studio():
 
 # ============================================================ generate/publish ====
 def run_generate(paths, slot):
+    """Pipeline: video N+1 is transcribed WHILE the clips of video N render, and clips render in parallel."""
     Sfull = build_settings()
-    prog = slot.progress(0.0, text="Starting…")
-    shutil.rmtree(OUT, ignore_errors=True)
-    os.makedirs(os.path.join(OUT, "transcripts"), exist_ok=True)
+    cpu = os.cpu_count() or 2
+    workers = int(Sfull["workers"]) or max(1, min(4, cpu))
+    threads = max(1, cpu // workers)                    # don't let N ffmpegs fight over the same cores
     fonts = st.session_state["fonts"]
     lang, beam = _lang(S), _beam(S)
 
-    trans = {}
+    shutil.rmtree(OUT, ignore_errors=True)
+    os.makedirs(os.path.join(OUT, "transcripts"), exist_ok=True)
+    prog = slot.progress(0.0, text="Starting…")
+
+    n = len(paths)
+    pending, results, details, notes = {}, [], [], []
+    total, done, best = 0, 0, 0.0
     store = st.session_state.setdefault("tr", {})
-    for i, vp in enumerate(paths):
-        stem = clean_stem(vp)
-        key = f"{vp}|{S['model_size']}|{lang}|{beam}"
-        if key not in store:
-            def cb(frac, _s=stem, _i=i):
-                prog.progress(min(1.0, (_i + frac) / len(paths)) * 0.6,
-                              text=f"Transcribing {_s}… {int(frac * 100)}%")
-            audio = engine.extract_audio(vp, out=os.path.join(WORK, "full.f32"))
-            store[key], _ = engine.transcribe(audio, S["model_size"], lang, progress=cb, beam_size=beam)
-        trans[vp] = store[key]
-        with open(os.path.join(OUT, "transcripts", f"{stem}.txt"), "w", encoding="utf-8") as f:
-            for s in trans[vp]:
-                f.write(f"[{s['start']:.1f} - {s['end']:.1f}] {s['text'].strip()}\n")
 
-    tasks, details = [], []
-    for vp in paths:
-        stem = clean_stem(vp)
-        segs = trans[vp]
-        if S["mode"] == "transcribe_only":
-            continue
-        if S["mode"] == "full_video":
-            os.makedirs(os.path.join(OUT, "captioned"), exist_ok=True)
-            end = max((x["end"] for x in segs), default=0)
-            out = os.path.join(OUT, "captioned", f"{stem}_captioned.mp4")
-            tasks.append((vp, segs, 0.0, end, out))
-            txt = engine.clip_text(segs, 0, end)
-            details.append({"file": f"{stem}_captioned.mp4", "path": out, "title": txt[:90] or stem,
-                            "desc": txt, "tags": engine.hashtags(txt)})
-        else:
-            clips = engine.find_clips(segs, Sfull["min_dur"], Sfull["max_dur"], max_clips=Sfull["max_clips"])
-            os.makedirs(os.path.join(OUT, "reels", stem), exist_ok=True)
-            for i, (s, e) in enumerate(clips):
-                out = os.path.join(OUT, "reels", stem, f"reel_{i + 1:02d}.mp4")
-                tasks.append((vp, segs, s, e, out))
-                txt = engine.clip_text(segs, s, e)
-                details.append({"file": f"{stem}/reel_{i + 1:02d}.mp4", "path": out,
-                                "title": txt[:90] or f"Reel {i + 1}", "desc": txt, "tags": engine.hashtags(txt)})
+    def reap():
+        nonlocal done
+        for f in [f for f in pending if f.done()]:
+            results.append(f.result())                  # re-raises render errors
+            pending.pop(f)
+            done += 1
 
-    results = []
-    if tasks:
-        done = 0
-        with concurrent.futures.ThreadPoolExecutor(max_workers=int(Sfull["workers"])) as ex:
-            futs = [ex.submit(engine.render_segment, vp, sg, s, e, o, Sfull, fonts) for (vp, sg, s, e, o) in tasks]
-            for f in concurrent.futures.as_completed(futs):
-                results.append(f.result())
-                done += 1
-                prog.progress(0.6 + 0.4 * done / len(tasks), text=f"Rendering {done}/{len(tasks)}…")
+    def show(tf, what):
+        nonlocal best
+        rp = (done / total) if total else tf
+        best = max(best, min(1.0, 0.55 * tf + 0.45 * rp))
+        prog.progress(best, text=f"{what} · rendered {done}/{total}" if total else what)
+
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=workers)
+    try:
+        for i, vp in enumerate(paths):
+            stem = clean_stem(vp)
+            key = f"{vp}|{S['model_size']}|{lang}|{beam}"
+            if key not in store:
+                def cb(frac, _s=stem, _i=i):
+                    reap()
+                    show((_i + frac) / n, f"Transcribing {_s} {int(frac * 100)}%")
+                audio = engine.extract_audio(vp, out=os.path.join(WORK, f"full_{i}.f32"))
+                store[key], _ = engine.transcribe(audio, S["model_size"], lang, progress=cb, beam_size=beam)
+            segs = store[key]
+            with open(os.path.join(OUT, "transcripts", f"{stem}.txt"), "w", encoding="utf-8") as f:
+                for s_ in segs:
+                    f.write(f"[{s_['start']:.1f} - {s_['end']:.1f}] {s_['text'].strip()}\n")
+            show((i + 1) / n, f"Transcribed {i + 1}/{n}")
+
+            if S["mode"] == "transcribe_only":
+                continue
+            vdur = media_info(vp)["dur"] or max((x["end"] for x in segs), default=0)
+            jobs = []
+            if S["mode"] == "full_video":
+                os.makedirs(os.path.join(OUT, "captioned"), exist_ok=True)
+                out = os.path.join(OUT, "captioned", f"{stem}_captioned.mp4")
+                jobs.append((0.0, vdur, out, f"{stem}_captioned.mp4"))
+            else:
+                clips = engine.find_clips(segs, Sfull["min_dur"], Sfull["max_dur"], max_clips=Sfull["max_clips"]) \
+                    if segs else []
+                if not clips:
+                    clips = engine.even_clips(vdur, Sfull["min_dur"], Sfull["max_dur"])
+                    if Sfull["max_clips"]:
+                        clips = clips[:Sfull["max_clips"]]
+                    if not segs:
+                        notes.append("no speech found, clips cut evenly without captions")
+                os.makedirs(os.path.join(OUT, "reels", stem), exist_ok=True)
+                for k, (s0, e0) in enumerate(clips):
+                    jobs.append((s0, e0, os.path.join(OUT, "reels", stem, f"reel_{k + 1:02d}.mp4"),
+                                 f"{stem}/reel_{k + 1:02d}.mp4"))
+            for (s0, e0, out, label) in jobs:
+                txt = engine.clip_text(segs, s0, e0)
+                details.append({"file": label, "path": out, "title": txt[:90] or stem, "desc": txt,
+                                "tags": engine.hashtags(txt)})
+                pending[ex.submit(engine.render_segment, vp, segs, s0, e0, out, Sfull, fonts, "veryfast",
+                                  threads)] = out
+                total += 1
+            reap()
+
+        while pending:
+            concurrent.futures.wait(list(pending), timeout=0.6, return_when=concurrent.futures.FIRST_COMPLETED)
+            reap()
+            show(1.0, "Rendering")
+    finally:
+        ex.shutdown(wait=False, cancel_futures=True)
+
     results.sort()
-
     with open(os.path.join(OUT, "post_details.txt"), "w", encoding="utf-8") as f:
         f.write("POST DETAILS\n" + "=" * 40 + "\n\n")
         for x in details:
             f.write(f"FILE: {x['file']}\nTITLE: {x['title']}\nDESCRIPTION:\n{x['desc']}\n"
                     f"HASHTAGS: {x['tags']} #shorts #reels\n" + "-" * 40 + "\n")
-    zpath = os.path.join(WORK, "output.zip")
-    with zipfile.ZipFile(zpath, "w") as z:                      # videos are already compressed -> store
+    with zipfile.ZipFile(os.path.join(WORK, "output.zip"), "w") as z:     # videos already compressed -> store
         for root, _, files in os.walk(OUT):
             for fn in files:
-                if fn.endswith(".ass"):
-                    continue
-                full = os.path.join(root, fn)
-                z.write(full, os.path.relpath(full, OUT))
+                if not fn.endswith(".ass"):
+                    full = os.path.join(root, fn)
+                    z.write(full, os.path.relpath(full, OUT))
     st.session_state["results"], st.session_state["details"] = results, details
-    st.session_state["last_msg"] = ("ok", f"Done — {len(results)} file(s) ready. Download or publish.")
+    extra = f" ({'; '.join(sorted(set(notes)))})" if notes else ""
+    st.session_state["last_msg"] = ("ok", f"Done — {len(results)} file(s) ready{extra}. Download or publish.")
 
 
-def run_drive(slot):
+def run_drive():
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaFileUpload
-    svc = build("drive", "v3", credentials=st.session_state["dr_creds"])
+    creds = google_creds()
+    if not creds.has_scopes([G_DR]):
+        raise RuntimeError("Drive access not granted — Disconnect Google and connect again.")
+    svc = build("drive", "v3", credentials=creds)
     media = MediaFileUpload(os.path.join(WORK, "output.zip"), resumable=True)
     f = svc.files().create(body={"name": "auto_reels_output.zip"}, media_body=media,
                            fields="id,webViewLink").execute()
@@ -859,12 +1006,15 @@ def run_drive(slot):
 def run_youtube(slot):
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaFileUpload
-    yt = build("youtube", "v3", credentials=st.session_state["yt_creds"])
+    creds = google_creds()
+    if not creds.has_scopes([G_YT]):
+        raise RuntimeError("YouTube access not granted — Disconnect Google and connect again.")
+    yt = build("youtube", "v3", credentials=creds)
     meta = {x["path"]: x for x in st.session_state.get("details", [])}
     files = [p for p in st.session_state["results"] if os.path.exists(p)]
     links = []
-    for n, p in enumerate(files, 1):
-        slot.progress(n / len(files), text=f"Uploading {n}/{len(files)} to YouTube…")
+    for n_, p in enumerate(files, 1):
+        slot.progress(n_ / len(files), text=f"Uploading {n_}/{len(files)} to YouTube…")
         m = meta.get(p, {})
         body = {"snippet": {"title": (m.get("title") or os.path.basename(p))[:95],
                             "description": m.get("desc", "") + "\n\n" + m.get("tags", ""), "categoryId": "22"},
@@ -880,7 +1030,7 @@ def action_bar():
     zpath = os.path.join(WORK, "output.zip")
     have = bool(st.session_state.get("results")) and os.path.exists(zpath)
     with st.container(key="actionbar"):
-        c1, c2, c3, c4, c5 = st.columns([1.1, 1, 1, 1.15, 3], vertical_alignment="center")
+        c1, c2, c3, c4, c5 = st.columns([1.1, 1, 1, 1.2, 3], vertical_alignment="center")
         gen = c1.button("Generate", type="primary", key="btn_gen")
         if have:
             with open(zpath, "rb") as f:
@@ -898,74 +1048,69 @@ def action_bar():
             if gen:
                 run_generate(st.session_state["paths"], slot)
                 st.rerun()
-            if drive:
-                if not st.session_state.get("dr_creds"):
-                    st.session_state["last_msg"] = ("bad", "Connect Drive first: right panel → Publish.")
-                else:
+            if drive or yt:
+                if not google_creds():
+                    st.session_state["last_msg"] = ("bad", "Connect Google first: right panel → Publish.")
+                elif drive:
                     slot.markdown("<span class='stat'>Uploading to Drive…</span>", unsafe_allow_html=True)
-                    run_drive(slot)
-                st.rerun()
-            if yt:
-                if not st.session_state.get("yt_creds"):
-                    st.session_state["last_msg"] = ("bad", "Connect YouTube first: right panel → Publish.")
+                    run_drive()
                 else:
                     run_youtube(slot)
                 st.rerun()
         except Exception as e:
             if type(e).__name__ in ("RerunException", "StopException"):
                 raise
-            st.session_state["last_msg"] = ("bad", f"Failed: {str(e)[:160]}")
+            st.session_state["last_msg"] = ("bad", f"Failed: {str(e)[:200]}")
             st.rerun()
 
 
 # ===================================================================== main ====
+def new_video():
+    st.session_state["ukey"] = st.session_state.get("ukey", 0) + 1
+    for k in ("paths", "primary", "results", "details", "pv", "pv_err", "last_msg", "tr"):
+        st.session_state.pop(k, None)
+
+
 def main():
     fonts = init_engine()
     st.session_state["fonts"] = fonts
     st.markdown(f"<style>{CSS}{font_css(fonts)}</style>", unsafe_allow_html=True)
-
-    ukey = st.session_state.setdefault("ukey", 0)
-    h1, h2, h3 = st.columns([2.6, 0.9, 1.7], vertical_alignment="center")
-    info = h1.empty()
-    with h2:
-        hc = st.columns(2)
-        with hc[0].popover("Help"):
-            st.markdown(GUIDE, unsafe_allow_html=True)
-        clear = hc[1].button("Clear", key="btn_clear",
-                             disabled=not st.session_state.get("paths"))
-    with h3:
-        with st.container(key="upbox"):
-            uploads = st.file_uploader("Upload video(s)", type=["mp4", "mov", "mkv", "webm", "avi"],
-                                       accept_multiple_files=True, label_visibility="collapsed",
-                                       key=f"up_{ukey}")
-    if clear:
-        st.session_state["ukey"] = ukey + 1
-        for k in ("paths", "primary", "results", "details", "pv", "last_msg"):
-            st.session_state.pop(k, None)
-        st.rerun()
-
     brand = ('<div class="brand"><div class="logo">AR</div><div><div class="bt">Auto Reels Studio</div>'
              '<div class="bs">%s</div></div></div>')
-    if not uploads:
-        st.session_state.pop("paths", None)
-        info.markdown(brand % "Upload, tune, preview, generate.", unsafe_allow_html=True)
-        st.markdown(
-            '<div class="hero"><h1>Turn long videos into captioned reels</h1>'
-            '<p>Upload a video from the top-right corner to begin.</p><div class="steps">'
-            '<div class="step"><b>1 · Upload</b><span>MP4, MOV, MKV, WebM or AVI up to 2 GB.</span></div>'
-            '<div class="step"><b>2 · Tune</b><span>Frame, captions, colours, audio and clip length.</span></div>'
-            '<div class="step"><b>3 · Generate</b><span>Auto-cut clips with word-by-word captions.</span></div>'
-            '</div></div>', unsafe_allow_html=True)
+    paths = st.session_state.get("paths")
+
+    # ---------- start screen: big uploader (files are copied to disk, so the widget can go away) ----------
+    if not paths:
+        st.markdown(brand % "Upload, tune, preview, generate.", unsafe_allow_html=True)
+        st.markdown('<div class="hero"><h1>Turn long videos into captioned reels</h1>'
+                    '<p>Drop one or more videos below to begin.</p></div>', unsafe_allow_html=True)
+        with st.container(key="herobox"):
+            uploads = st.file_uploader("Upload video(s)", type=["mp4", "mov", "mkv", "webm", "avi"],
+                                       accept_multiple_files=True, label_visibility="collapsed",
+                                       key=f"up_{st.session_state.get('ukey', 0)}")
+        st.markdown('<div class="steps">'
+                    '<div class="step"><b>1 · Upload</b><span>MP4, MOV, MKV, WebM or AVI up to 2 GB each.</span></div>'
+                    '<div class="step"><b>2 · Tune</b><span>Frame, captions, colours, audio and clip length.</span></div>'
+                    '<div class="step"><b>3 · Generate</b><span>Auto-cut clips with word-by-word captions.</span></div>'
+                    '</div>', unsafe_allow_html=True)
+        if uploads:
+            with st.spinner("Saving…"):
+                st.session_state["paths"] = [save_upload(u) for u in uploads]
+                st.session_state["primary"] = st.session_state["paths"][0]
+            st.rerun()
         return
 
-    paths = [save_upload(u) for u in uploads]
-    st.session_state["paths"], st.session_state["primary"] = paths, paths[0]
+    # ---------- app bar ----------
     mi = media_info(paths[0])
-    chips = (f'<span class="chip">{clean_stem(paths[0])[:30]}</span>'
-             f'<span class="chip">{human(mi["size"])}</span><span class="chip">{mi["dur"] / 60:.1f} min</span>')
+    chips = (f'<span class="chip">{clean_stem(paths[0])[:32]}</span><span class="chip">{human(mi["size"])}</span>'
+             f'<span class="chip">{mi["dur"] / 60:.1f} min</span>')
     if len(paths) > 1:
         chips += f'<span class="chip">+{len(paths) - 1} more</span>'
-    info.markdown(brand % chips, unsafe_allow_html=True)
+    h1, h2, h3 = st.columns([4, 0.8, 1.1], vertical_alignment="center")
+    h1.markdown(brand % chips, unsafe_allow_html=True)
+    with h2.popover("Help"):
+        st.markdown(GUIDE, unsafe_allow_html=True)
+    h3.button("New video", on_click=new_video, help="Remove the current upload and results, then pick another video.")
 
     studio()
     action_bar()
