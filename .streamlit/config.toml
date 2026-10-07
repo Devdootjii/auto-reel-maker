@@ -1,14 +1,13 @@
 [server]
 maxUploadSize = 2000
-fileWatcherType = "none"
 runOnSave = false
-
+ 
 [browser]
 gatherUsageStats = false
-
+ 
 [client]
 toolbarMode = "minimal"
-
+ 
 [theme]
 base = "dark"
 primaryColor = "#7c5cf0"
