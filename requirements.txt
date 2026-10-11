@@ -3,5 +3,7 @@ faster-whisper
 tokenizers>=0.22
 scikit-learn
 imageio-ffmpeg
+yt-dlp
+gdown
 google-api-python-client
 google-auth-oauthlib

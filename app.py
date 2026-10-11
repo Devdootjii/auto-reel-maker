@@ -189,7 +189,13 @@ def extract_audio(video_path, ss=None, dur=None, out="audio.f32"):
         cmd += ["-t", str(dur)]
     cmd += ["-vn", "-ac", "1", "-ar", "16000", "-f", "f32le", out]
     _run(cmd)
-    return np.fromfile(out, dtype=np.float32)
+    try:
+        return np.fromfile(out, dtype=np.float32)
+    finally:
+        try:
+            os.remove(out)
+        except OSError:
+            pass
 
 
 def extract_frame(video_path, t, out="frame.jpg", width=None):
@@ -215,7 +221,7 @@ def get_model(model_size="small"):
             from faster_whisper import WhisperModel
             _MODELS[model_size] = WhisperModel(
                 model_size, device="cpu", compute_type="int8",
-                cpu_threads=os.cpu_count() or 4, num_workers=1)
+                cpu_threads=min(real_cpus(), 4), num_workers=1)
         return _MODELS[model_size]
 
 
@@ -509,6 +515,151 @@ def render_segment(video_path, segments, s, e, out_path, S, font_dir, preset="ve
 # `engine.xxx(...)` keeps working everywhere in the app
 engine = types.SimpleNamespace(**{k: v for k, v in list(globals().items()) if not k.startswith("__")})
 
+
+# ====================================================================================
+#  SERVER LIMITS — hosted containers report the HOST's cpu count / memory, so never trust
+#  os.cpu_count(). Too many threads + parallel ffmpeg + big uploads = the crash you saw.
+# ====================================================================================
+import math
+import socket
+import ipaddress
+import uuid
+import time
+import hmac
+from urllib.parse import urlparse
+
+
+def _rd(path):
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except Exception:
+        return ""
+
+
+def real_cpus():
+    if not hasattr(_PERSIST, "cpus"):
+        n = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else (os.cpu_count() or 2)
+        v2 = _rd("/sys/fs/cgroup/cpu.max").split()
+        if len(v2) == 2 and v2[0] != "max":
+            try:
+                n = min(n, max(1, math.ceil(int(v2[0]) / int(v2[1]))))
+            except ValueError:
+                pass
+        q, per = _rd("/sys/fs/cgroup/cpu/cpu.cfs_quota_us"), _rd("/sys/fs/cgroup/cpu/cpu.cfs_period_us")
+        if q.lstrip("-").isdigit() and per.isdigit() and int(q) > 0:
+            n = min(n, max(1, math.ceil(int(q) / int(per))))
+        _PERSIST.cpus = max(1, min(n, 8))
+    return _PERSIST.cpus
+
+
+def mem_gb():
+    if not hasattr(_PERSIST, "mem"):
+        cands = []
+        for pth in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+            v = _rd(pth)
+            if v.isdigit() and int(v) < (1 << 42):
+                cands.append(int(v) / 2 ** 30)
+        m = re.search(r"MemTotal:\s+(\d+) kB", _rd("/proc/meminfo"))
+        if m:
+            cands.append(int(m.group(1)) / 2 ** 20)
+        _PERSIST.mem = min(cands) if cands else 2.5
+    return _PERSIST.mem
+
+
+def max_workers():
+    """How many renders may run at once without running out of RAM (~0.7 GB each + Whisper)."""
+    return max(1, min(real_cpus(), int((mem_gb() - 1.6) // 0.7)))
+
+
+def auto_workers():
+    return max(1, min(max_workers(), max(1, real_cpus() // 2), 3))
+
+
+if not hasattr(_PERSIST, "heavy"):
+    _PERSIST.heavy = threading.Semaphore(1 if (mem_gb() < 6 or real_cpus() <= 2) else 2)
+    _PERSIST.dl = threading.Semaphore(2)
+
+
+class Busy(Exception):
+    pass
+
+
+class heavy_slot:
+    """Only a few CPU/RAM-heavy jobs may run at once across ALL visitors (queue instead of crash)."""
+
+    def __init__(self, wait=True, on_wait=None):
+        self.wait, self.on_wait = wait, on_wait
+
+    def __enter__(self):
+        if not _PERSIST.heavy.acquire(blocking=False):
+            if not self.wait:
+                raise Busy()
+            if self.on_wait:
+                self.on_wait()
+            _PERSIST.heavy.acquire()
+        return self
+
+    def __exit__(self, *a):
+        _PERSIST.heavy.release()
+        return False
+
+
+class dl_slot:
+    def __enter__(self):
+        _PERSIST.dl.acquire()
+        return self
+
+    def __exit__(self, *a):
+        _PERSIST.dl.release()
+        return False
+
+
+# ---- per-visitor folders: two people can never overwrite each other's files ----
+def sid():
+    return st.session_state.setdefault("_sid", uuid.uuid4().hex[:10])
+
+
+def sdir():
+    d = os.path.join(WORK, "sessions", sid())
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def out_dir():
+    return os.path.join(sdir(), "out")
+
+
+def zip_path():
+    return os.path.join(sdir(), "output.zip")
+
+
+def tmp_path(ext=""):
+    d = os.path.join(WORK, "tmp")
+    os.makedirs(d, exist_ok=True)
+    return os.path.join(d, uuid.uuid4().hex + ext)
+
+
+def purge_old(hours=6):
+    """Free disk: delete visitor folders / temp files nobody touched for a while."""
+    now = time.time()
+    base = os.path.join(WORK, "sessions")
+    try:
+        for name in os.listdir(base):
+            full = os.path.join(base, name)
+            if name != sid() and now - os.path.getmtime(full) > hours * 3600:
+                shutil.rmtree(full, ignore_errors=True)
+    except OSError:
+        pass
+    tmp = os.path.join(WORK, "tmp")
+    try:
+        for name in os.listdir(tmp):
+            full = os.path.join(tmp, name)
+            if now - os.path.getmtime(full) > 3600:
+                os.remove(full)
+    except OSError:
+        pass
+
 st.set_page_config(page_title="Auto Reels Studio", page_icon="🎬", layout="wide",
                    initial_sidebar_state="collapsed")
 
@@ -551,15 +702,20 @@ header[data-testid="stHeader"],[data-testid="stToolbar"],[data-testid="stDecorat
 .logo{width:2.5rem;height:2.5rem;border-radius:.7rem;background:linear-gradient(135deg,#7c5cf0,#3ec6a8);
   display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.9rem;
   box-shadow:0 6px 18px rgba(124,92,240,.35);}
-.bt{font-size:1.1rem;font-weight:650;line-height:1.15;}
+.brand1{display:flex;align-items:center;gap:.7rem;min-width:0;}
+.brand1 .sep{width:1px;height:1.3rem;background:var(--line2);flex:none;}
+.chips{display:flex;align-items:center;gap:.3rem;white-space:nowrap;overflow:hidden;min-width:0;}
+.chips .chip{margin:0;}
+.st-key-topbar{padding-bottom:.1rem;}
+.bt{font-size:1.1rem;font-weight:650;line-height:1.15;white-space:nowrap;}
 .bs{font-size:.76rem;color:var(--muted);line-height:1.3;margin-top:2px;}
 .chip{display:inline-block;background:rgba(24,28,38,.9);border:1px solid var(--line);border-radius:.45rem;
   padding:1px .55rem;margin-right:.3rem;font-size:.72rem;color:#c5cadb;}
 
 /* ---------- panels: equal height, fill the window ---------- */
 .st-key-p_left,.st-key-p_center,.st-key-p_right{background:var(--panel);border:1px solid var(--line);
-  border-radius:.9rem;padding:.8rem .9rem;flex:0 0 auto !important;height:calc(100vh - 150px) !important;
-  max-height:calc(100vh - 150px) !important;overflow-y:auto;box-shadow:0 10px 30px rgba(0,0,0,.28);}
+  border-radius:.9rem;padding:.8rem .9rem;flex:0 0 auto !important;height:var(--panel-h,calc(100vh - 150px)) !important;
+  max-height:var(--panel-h,calc(100vh - 150px)) !important;overflow-y:auto;box-shadow:0 10px 30px rgba(0,0,0,.28);}
 .st-key-p_center{overflow:hidden;container-type:inline-size;}
 [class*="st-key-p_"]::-webkit-scrollbar{width:6px;}
 [class*="st-key-p_"]::-webkit-scrollbar-thumb{background:var(--line2);border-radius:6px;}
@@ -582,22 +738,24 @@ div[data-baseweb="select"]>div{min-height:2rem !important;background:var(--field
 [data-testid="stExpander"] summary{font-size:.8rem !important;padding:.35rem .6rem !important;}
 code{font-size:.72rem !important;}
 
-.stButton,.stDownloadButton,[data-testid="stPopover"]{width:100%;}
-.stButton>button,.stDownloadButton>button,[data-testid="stPopover"] button{width:100%;min-height:2.2rem;
+.stButton,.stDownloadButton,[data-testid="stPopover"],[data-testid="stTooltipHoverTarget"]{width:100%;}
+.stButton button,.stDownloadButton button,[data-testid="stPopover"] button{width:100%;min-height:2.2rem;
   padding:.15rem .6rem;border-radius:.6rem;font-size:.8rem;font-weight:600;border:1px solid var(--line2);
   background:rgba(24,28,38,.9);color:var(--text);transition:border-color .15s,background .15s;}
-.stButton>button:hover,.stDownloadButton>button:hover,[data-testid="stPopover"] button:hover{
+.stButton button:hover,.stDownloadButton button:hover,[data-testid="stPopover"] button:hover{
   border-color:var(--accent);color:#fff;background:#1e2331;}
-.stButton>button[kind="primary"],.stButton>button[data-testid="stBaseButton-primary"]{
+.stButton button[kind="primary"],.stButton button[data-testid="stBaseButton-primary"]{
   background:linear-gradient(135deg,#7c5cf0,#5b6cf0);border-color:transparent;color:#fff;
   box-shadow:0 6px 18px rgba(124,92,240,.35);}
-.stButton>button[kind="primary"]:hover,.stButton>button[data-testid="stBaseButton-primary"]:hover{filter:brightness(1.12);}
-.stButton>button:disabled,.stDownloadButton>button:disabled{opacity:.38;}
+.stButton button[kind="primary"]:hover,.stButton button[data-testid="stBaseButton-primary"]:hover{filter:brightness(1.12);}
+.stButton button:disabled,.stDownloadButton button:disabled{opacity:.38;}
 
 [data-testid="stSegmentedControl"]{width:100%;}
-.st-key-p_left [data-testid="stSegmentedControl"] [role="group"],
-.st-key-p_left [data-testid="stSegmentedControl"]>div{flex-wrap:nowrap !important;}
-.st-key-p_left [data-testid="stSegmentedControl"] button{flex:1 1 auto;padding:.15rem .3rem !important;}
+.st-key-p_left [data-testid="stSegmentedControl"] div{flex-wrap:nowrap !important;}
+.st-key-p_left [data-testid="stSegmentedControl"] button{flex:1 1 auto;min-width:0;padding:.15rem .3rem !important;
+  white-space:nowrap;}
+.st-key-p_left [data-testid="stSegmentedControl"] button p{font-size:.72rem !important;}
+.st-key-herobox [data-testid="stSegmentedControl"]{margin-bottom:.35rem;}
 .empty{border:1px dashed var(--line2);border-radius:.8rem;padding:1.4rem 1rem;text-align:center;margin-top:.5rem;}
 .empty b{display:block;font-size:.88rem;margin-bottom:.2rem;}
 .empty span{font-size:.76rem;color:var(--muted);}
@@ -631,7 +789,7 @@ code{font-size:.72rem !important;}
 .guide li,.guide p{color:#c3c7db;font-size:.8rem;margin-bottom:2px;}
 
 /* ---------- phone preview (scales with window height) ---------- */
-.phone{--ph:clamp(240px,min(calc(100vh - 234px),calc((100cqw - 1.8rem) / .573)),780px);position:relative;height:var(--ph);
+.phone{--ph:clamp(240px,min(calc(var(--panel-h,calc(100vh - 150px)) - 84px),calc((100cqw - 1.8rem) / .573)),780px);position:relative;height:var(--ph);
   width:calc(var(--ph)*.573);margin:.5rem auto 0 auto;border-radius:calc(var(--ph)*.075);
   background:#1b1e29;border:1px solid #38405a;box-shadow:0 18px 50px rgba(0,0,0,.6),0 0 0 1px rgba(124,92,240,.12);}
 .phone-screen{position:absolute;inset:calc(var(--ph)*.012);border-radius:calc(var(--ph)*.064);
@@ -653,7 +811,6 @@ code{font-size:.72rem !important;}
 
 # ================================================================ constants ====
 WORK = "work"
-OUT = os.path.join(WORK, "out")
 os.makedirs(WORK, exist_ok=True)
 
 TABS = ["General", "Frame", "Captions", "Motion", "Colors", "Audio", "Clips"]
@@ -674,6 +831,8 @@ ALLOWED = {
     "preview_mode": ["frame", "video"],
     "privacy": ["private", "unlisted", "public"],
 }
+if mem_gb() < 4:        # the "medium" model alone needs ~2 GB and would crash a small server
+    ALLOWED["model_size"] = ["tiny", "base", "small"]
 
 DEFAULTS = dict(mode="reels", language="auto", model_size="small", accuracy="fast", FONT="auto",
                 caption_style="karaoke", caption_anim="pop", caption_box=False, caption_box_opacity=0.6,
@@ -823,6 +982,12 @@ def font_css(fonts_dir):
     return "".join(out)
 
 
+def _safe(name, fallback="video"):
+    base, ext = os.path.splitext(name)
+    base = re.sub(r"[^\w\-. ]+", "", base, flags=re.U).strip().strip(".")[:60] or fallback
+    return base + (ext if re.fullmatch(r"\.\w{1,5}", ext or "") else "")
+
+
 def save_upload(u):
     """Save the upload to disk. Cheap key (name+size+first MB) — no full-file hashing."""
     try:
@@ -830,7 +995,7 @@ def save_upload(u):
     except Exception:
         buf = memoryview(u.read())
     h = hashlib.md5(f"{u.name}|{len(buf)}".encode() + bytes(buf[:1 << 20])).hexdigest()[:10]
-    p = os.path.join(WORK, f"{h}_{u.name}")
+    p = os.path.join(sdir(), f"{h}_{_safe(u.name)}")
     if not os.path.exists(p):
         with open(p, "wb") as f:
             f.write(buf)
@@ -872,37 +1037,47 @@ def _beam(S_):
     return 1 if S_["accuracy"] == "fast" else 5
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=24)
 def frame_uri(video_path, t):
     out = os.path.join(WORK, f"frame_{hashlib.md5((video_path + str(t)).encode()).hexdigest()[:8]}.jpg")
     engine.extract_frame(video_path, t, out, width=480)
     return "data:image/jpeg;base64," + base64.b64encode(open(out, "rb").read()).decode()
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=16)
 def preview_words(video_path, ss, dur, model_size, language, beam):
-    """Real words from a short window so the preview captions match the real output."""
-    audio = engine.extract_audio(video_path, ss=ss, dur=dur, out=os.path.join(WORK, "pw.f32"))
-    segs, _ = engine.transcribe(audio, model_size, language, beam_size=beam)
-    return [w.strip() for s in segs for (_, _, w) in s["words"] if w.strip()][:12]
+    """Real words from a short window so the preview captions match the real output.
+    Raises Busy (not cached) if the server is busy -> caller falls back to sample words."""
+    with heavy_slot(wait=False):
+        audio = engine.extract_audio(video_path, ss=ss, dur=dur, out=tmp_path(".f32"))
+        segs, _ = engine.transcribe(audio, model_size, language, beam_size=beam)
+    return [w.strip() for s_ in segs for (_, _, w) in s_["words"] if w.strip()][:12]
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=2)
 def preview_video_b64(video_path, ss, dur, settings_json):
     S2 = json.loads(settings_json)
-    audio = engine.extract_audio(video_path, ss=ss, dur=dur, out=os.path.join(WORK, "pv.f32"))
-    segs, _ = engine.transcribe(audio, S2["model_size"], _lang(S2), beam_size=_beam(S2))
-    for s in segs:
-        s["start"] += ss
-        s["end"] += ss
-        s["words"] = [(a + ss, b + ss, w) for (a, b, w) in s["words"]]
-    out = os.path.join(WORK, "preview.mp4")
-    engine.render_segment(video_path, segs, ss, ss + dur, out, S2, st.session_state["fonts"],
-                          preset="ultrafast")
-    small = out + ".small.mp4"
-    subprocess.run([engine.ffmpeg_exe(), "-y", "-loglevel", "error", "-i", out, "-vf", "scale=540:960",
-                    "-crf", "31", "-preset", "veryfast", "-an", small], check=True)
-    return "data:video/mp4;base64," + base64.b64encode(open(small, "rb").read()).decode()
+    out, small = tmp_path(".mp4"), tmp_path(".mp4")
+    try:
+        with heavy_slot():
+            audio = engine.extract_audio(video_path, ss=ss, dur=dur, out=tmp_path(".f32"))
+            segs, _ = engine.transcribe(audio, S2["model_size"], _lang(S2), beam_size=_beam(S2))
+            for s_ in segs:
+                s_["start"] += ss
+                s_["end"] += ss
+                s_["words"] = [(a + ss, b + ss, w) for (a, b, w) in s_["words"]]
+            engine.render_segment(video_path, segs, ss, ss + dur, out, S2, st.session_state["fonts"],
+                                  preset="ultrafast", threads=real_cpus())
+            subprocess.run([engine.ffmpeg_exe(), "-y", "-loglevel", "error", "-i", out, "-vf", "scale=540:960",
+                            "-crf", "31", "-preset", "veryfast", "-an", small], check=True)
+        with open(small, "rb") as f:
+            return "data:video/mp4;base64," + base64.b64encode(f.read()).decode()
+    finally:
+        for f_ in (out, out + ".ass", small):
+            try:
+                os.remove(f_)
+            except OSError:
+                pass
 
 
 def build_settings():
@@ -1089,7 +1264,21 @@ def google_disconnect():
     st.session_state.pop("g_url", None)
 
 
+def publish_ok():
+    pin = _secret("PUBLISH_PIN")
+    return (not pin) or bool(st.session_state.get("pin_ok"))
+
+
 def publish_panel():
+    pin = _secret("PUBLISH_PIN")
+    if pin and not st.session_state.get("pin_ok"):
+        st.markdown("<span class='hint'>Publishing is locked. Enter the PIN you set in Secrets.</span>",
+                    unsafe_allow_html=True)
+        entered = st.text_input("PIN", type="password", key="pin_in", label_visibility="collapsed")
+        if entered and hmac.compare_digest(str(entered), str(pin)):
+            st.session_state["pin_ok"] = True
+            st.rerun(scope="fragment")
+        return
     creds = google_creds()
     if creds:
         yt_ok, dr_ok = creds.has_scopes([G_YT]), creds.has_scopes([G_DR])
@@ -1100,6 +1289,10 @@ def publish_panel():
         S["privacy"] = st.selectbox("YouTube privacy", ALLOWED["privacy"], key="w_privacy")
         st.markdown("<span class='hint'>You stay signed in — no secret or code needed again.</span>",
                     unsafe_allow_html=True)
+        if not pin:
+            st.markdown("<span class='hint'>Tip: anyone who opens this app can publish with your Google login. "
+                        "Add <code>PUBLISH_PIN = \"1234\"</code> in Secrets to lock it.</span>",
+                        unsafe_allow_html=True)
         if not (yt_ok and dr_ok):
             st.markdown("<span class='hint'>Some access is missing. Disconnect and connect again to grant both.</span>",
                         unsafe_allow_html=True)
@@ -1248,10 +1441,9 @@ def tab_clips():
     num("max_dur", "Max clip (s)", 10, 600, c2)
     num("max_clips", "Max clips (0 = all)", 0, 100, c1)
     num("workers", "Parallel jobs (0 = auto)", 0, 8, c2)
-    cpu = os.cpu_count() or 2
-    st.markdown(f"<span class='hint'>Clips render in parallel, and the next video is transcribed while earlier "
-                f"ones render. Auto uses {max(1, min(4, cpu))} job(s) on this server "
-                f"({cpu} CPU core{'s' if cpu != 1 else ''}).</span>", unsafe_allow_html=True)
+    st.markdown(f"<span class='hint'>Auto = {auto_workers()} job(s). This server has {real_cpus()} CPU core(s) and "
+                f"{mem_gb():.1f} GB RAM, so at most {max_workers()} render(s) run at once — more would crash it. "
+                f"The next video is transcribed while earlier ones render.</span>", unsafe_allow_html=True)
 
 
 TAB_FN = {"General": tab_general, "Frame": tab_frame, "Captions": tab_captions, "Motion": tab_motion,
@@ -1362,10 +1554,19 @@ def studio():
 
 # ============================================================ generate/publish ====
 def run_generate(paths, slot):
+    def waiting():
+        slot.markdown("<span class='stat'>Server is busy with another job — you are next in line…</span>",
+                      unsafe_allow_html=True)
+    with heavy_slot(on_wait=waiting):                   # one heavy job at a time on small servers
+        _run_generate(paths, slot)
+
+
+def _run_generate(paths, slot):
     """Pipeline: video N+1 is transcribed WHILE the clips of video N render, and clips render in parallel."""
     Sfull = build_settings()
-    cpu = os.cpu_count() or 2
-    workers = int(Sfull["workers"]) or max(1, min(4, cpu))
+    OUT = out_dir()
+    cpu = real_cpus()
+    workers = min(int(Sfull["workers"]) or auto_workers(), max_workers())
     threads = max(1, cpu // workers)                    # don't let N ffmpegs fight over the same cores
     fonts = st.session_state["fonts"]
     lang, beam = _lang(S), _beam(S)
@@ -1401,7 +1602,7 @@ def run_generate(paths, slot):
                 def cb(frac, _s=stem, _i=i):
                     reap()
                     show((_i + frac) / n, f"Transcribing {_s} {int(frac * 100)}%")
-                audio = engine.extract_audio(vp, out=os.path.join(WORK, f"full_{i}.f32"))
+                audio = engine.extract_audio(vp, out=tmp_path(".f32"))
                 store[key], _ = engine.transcribe(audio, S["model_size"], lang, progress=cb, beam_size=beam)
             segs = store[key]
             with open(os.path.join(OUT, "transcripts", f"{stem}.txt"), "w", encoding="utf-8") as f:
@@ -1452,7 +1653,7 @@ def run_generate(paths, slot):
         for x in details:
             f.write(f"FILE: {x['file']}\nTITLE: {x['title']}\nDESCRIPTION:\n{x['desc']}\n"
                     f"HASHTAGS: {x['tags']} #shorts #reels\n" + "-" * 40 + "\n")
-    with zipfile.ZipFile(os.path.join(WORK, "output.zip"), "w") as z:     # videos already compressed -> store
+    with zipfile.ZipFile(zip_path(), "w") as z:     # videos already compressed -> store
         for root, _, files in os.walk(OUT):
             for fn in files:
                 if not fn.endswith(".ass"):
@@ -1470,7 +1671,7 @@ def run_drive():
     if not creds.has_scopes([G_DR]):
         raise RuntimeError("Drive access not granted — Disconnect Google and connect again.")
     svc = build("drive", "v3", credentials=creds)
-    media = MediaFileUpload(os.path.join(WORK, "output.zip"), resumable=True)
+    media = MediaFileUpload(zip_path(), resumable=True)
     f = svc.files().create(body={"name": "auto_reels_output.zip"}, media_body=media,
                            fields="id,webViewLink").execute()
     st.session_state["last_msg"] = ("ok", "Saved to Drive: " + f.get("webViewLink", ""))
@@ -1498,16 +1699,30 @@ def run_youtube(slot):
     st.session_state["last_msg"] = ("ok", "Uploaded: " + "  ".join(links))
 
 
+def download_zip(col, zpath):
+    """Newer Streamlit reads the file only when you click (deferred); older ones fall back."""
+    def _bytes():
+        with open(zpath, "rb") as f:
+            return f.read()
+    for kw in ({"on_click": "ignore"}, {}):
+        try:
+            col.download_button("Download .zip", _bytes, file_name="output.zip", **kw)
+            return
+        except Exception:
+            continue
+    with open(zpath, "rb") as f:
+        col.download_button("Download .zip", f, file_name="output.zip")
+
+
 @st.fragment
 def action_bar():
-    zpath = os.path.join(WORK, "output.zip")
+    zpath = zip_path()
     have = bool(st.session_state.get("results")) and os.path.exists(zpath)
     with st.container(key="actionbar"):
         c1, c2, c3, c4, c5 = st.columns([1.1, 1, 1, 1.2, 3], vertical_alignment="center")
         gen = c1.button("Generate", type="primary", key="btn_gen")
         if have:
-            with open(zpath, "rb") as f:
-                c2.download_button("Download .zip", f, file_name="output.zip")
+            download_zip(c2, zpath)
         else:
             c2.button("Download .zip", disabled=True)
         drive = c3.button("Save to Drive", disabled=not have)
@@ -1522,7 +1737,9 @@ def action_bar():
                 run_generate(st.session_state["paths"], slot)
                 st.rerun()
             if drive or yt:
-                if not google_creds():
+                if not publish_ok():
+                    st.session_state["last_msg"] = ("bad", "Publishing is locked: enter the PIN in the Publish tab.")
+                elif not google_creds():
                     st.session_state["last_msg"] = ("bad", "Connect Google first: right panel → Publish.")
                 elif drive:
                     slot.markdown("<span class='stat'>Uploading to Drive…</span>", unsafe_allow_html=True)
@@ -1537,54 +1754,248 @@ def action_bar():
             st.rerun()
 
 
+
+# ============================================================== video from a link ====
+def _public_url(u):
+    """Block localhost / private networks (this app fetches URLs on the server)."""
+    try:
+        pu = urlparse(u.strip())
+        if pu.scheme not in ("http", "https") or not pu.hostname:
+            return False
+        return all(ipaddress.ip_address(ai[4][0]).is_global for ai in socket.getaddrinfo(pu.hostname, None))
+    except Exception:
+        return False
+
+
+def _finish_download(src_path, title):
+    ext = os.path.splitext(src_path)[1] or ".mp4"
+    h = hashlib.md5(src_path.encode()).hexdigest()[:10]
+    dst = os.path.join(sdir(), f"{h}_{_safe(title)}{ext}")
+    os.replace(src_path, dst)
+    if os.path.getsize(dst) > 2.5 * 2 ** 30:
+        os.remove(dst)
+        raise RuntimeError("File is larger than 2.5 GB.")
+    if media_info(dst)["dur"] <= 0:
+        os.remove(dst)
+        raise RuntimeError("That link did not give a playable video. For Google Drive set sharing to "
+                           "'Anyone with the link'.")
+    return dst
+
+
+def _fetch_ytdlp(url, bar):
+    try:
+        import yt_dlp
+    except ImportError:
+        raise RuntimeError("yt-dlp is not installed — add 'yt-dlp' to requirements.txt")
+
+    def hook(d):
+        if d.get("status") == "downloading":
+            tot = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
+            if tot:
+                frac = min(1.0, d.get("downloaded_bytes", 0) / tot)
+                bar.progress(frac, text=f"Downloading… {int(frac * 100)}%  {str(d.get('_speed_str', '')).strip()}")
+        elif d.get("status") == "finished":
+            bar.progress(1.0, text="Processing…")
+
+    base = {"quiet": True, "no_warnings": True, "noplaylist": True, "socket_timeout": 30, "retries": 3,
+            "ffmpeg_location": engine.ffmpeg_exe()}
+    cookies = os.path.join(WORK, "yt_cookies.txt")
+    if os.path.exists(cookies):
+        base["cookiefile"] = cookies
+    try:
+        with yt_dlp.YoutubeDL(base) as ydl:                       # 1) look first (length check)
+            info = ydl.extract_info(url, download=False)
+        if info.get("entries"):
+            info = next(iter(info["entries"]))
+        if (info.get("duration") or 0) > 4 * 3600:
+            raise RuntimeError("Video is longer than 4 hours.")
+        opts = dict(base, format="bv*[height<=1080]+ba/b[height<=1080]/b", merge_output_format="mp4",
+                    outtmpl=os.path.join(sdir(), "dl_%(id).60s.%(ext)s"), max_filesize=1_500_000_000,
+                    restrictfilenames=True, progress_hooks=[hook])
+        with yt_dlp.YoutubeDL(opts) as ydl:                       # 2) download
+            info = ydl.extract_info(url, download=True)
+        if info.get("entries"):
+            info = next(iter(info["entries"]))
+    except RuntimeError:
+        raise
+    except Exception as e:
+        msg = str(e).replace("ERROR: ", "")
+        if re.search(r"sign in|not a bot|cookies", msg, re.I):
+            raise RuntimeError("YouTube blocked this server (bot check). Add a cookies.txt below, or download "
+                               "the video and upload the file instead.")
+        raise RuntimeError(msg[:200])
+    fp = ((info.get("requested_downloads") or [{}])[0]).get("filepath")
+    if not fp or not os.path.exists(fp):
+        found = sorted(glob.glob(os.path.join(sdir(), f"dl_{info.get('id', '')}.*")), key=os.path.getmtime)
+        fp = found[-1] if found else None
+    if not fp:
+        raise RuntimeError("Download finished but the file was not found.")
+    return fp, info.get("title") or info.get("id") or "video"
+
+
+def _fetch_drive(url, bar):
+    try:
+        import gdown
+    except ImportError:
+        raise RuntimeError("gdown is not installed — add 'gdown' to requirements.txt")
+    if "/folders/" in url:
+        raise RuntimeError("Folder links are not supported — open the video and copy ITS link.")
+    bar.progress(0.25, text="Downloading from Google Drive…")
+    try:
+        fp = gdown.download(url=url, output=sdir() + os.sep, quiet=True, fuzzy=True)
+    except Exception as e:
+        raise RuntimeError("Drive download failed: " + str(e)[:160])
+    if not fp or not os.path.exists(fp):
+        raise RuntimeError("Could not download. Is the file shared as 'Anyone with the link'?")
+    bar.progress(1.0, text="Processing…")
+    return fp, os.path.splitext(os.path.basename(fp))[0]
+
+
+def fetch_video(url, kind, bar):
+    url = url.strip()
+    host = (urlparse(url).hostname or "").lower()
+    if not _public_url(url):
+        raise RuntimeError("Enter a full public link starting with https://")
+    if kind == "drive" or host.endswith("drive.google.com") or host.endswith("docs.google.com"):
+        if not (host.endswith("drive.google.com") or host.endswith("docs.google.com")):
+            raise RuntimeError("That is not a Google Drive link.")
+        fp, title = _fetch_drive(url, bar)
+    else:
+        fp, title = _fetch_ytdlp(url, bar)
+    return _finish_download(fp, title)
+
+
 # ===================================================================== main ====
 def new_video():
+    shutil.rmtree(sdir(), ignore_errors=True)
     st.session_state["ukey"] = st.session_state.get("ukey", 0) + 1
     for k in ("paths", "primary", "results", "details", "pv", "pv_err", "last_msg", "tr"):
         st.session_state.pop(k, None)
 
 
+FIT_JS = """<script>
+(function(){
+  var d; try { d = window.parent.document; } catch (e) { return; }
+  function fit(){
+    var bar = d.querySelector('.st-key-actionbar'), p = d.querySelector('.st-key-p_left');
+    if (!bar || !p) return;
+    var h = Math.floor(bar.getBoundingClientRect().top - p.getBoundingClientRect().top - 12);
+    if (h > 220) d.documentElement.style.setProperty('--panel-h', h + 'px');
+  }
+  fit(); setInterval(fit, 600);
+  try { window.parent.addEventListener('resize', fit); } catch (e) {}
+})();
+</script>"""
+
+SOURCES = ["Upload file", "YouTube / link", "Google Drive"]
+
+
+def landing(brand):
+    st.markdown(brand % "Upload, tune, preview, generate.", unsafe_allow_html=True)
+    st.markdown('<div class="hero"><h1>Turn long videos into captioned reels</h1>'
+                '<p>Drop one or more videos below to begin.</p></div>', unsafe_allow_html=True)
+    uploads, err = None, None
+    with st.container(key="herobox"):
+        st.session_state.setdefault("w_src", SOURCES[0])
+        st.segmented_control("Source", SOURCES, key="w_src", label_visibility="collapsed")
+        src = st.session_state.get("w_src") or SOURCES[0]
+        if src == SOURCES[0]:
+            uploads = st.file_uploader("Upload video(s)", type=["mp4", "mov", "mkv", "webm", "avi"],
+                                       accept_multiple_files=True, label_visibility="collapsed",
+                                       key=f"up_{st.session_state.get('ukey', 0)}")
+        else:
+            drive = src == SOURCES[2]
+            url = st.text_input("Video link", key="url_drive" if drive else "url_link",
+                                label_visibility="collapsed",
+                                placeholder=("https://drive.google.com/file/d/…/view" if drive
+                                             else "https://www.youtube.com/watch?v=…"))
+            st.markdown("<span class='hint'>%s</span>" % (
+                "Share the file as <b>Anyone with the link</b>. Large files are fine — they download straight "
+                "to the server." if drive else
+                "YouTube, Instagram, X, Facebook, Vimeo or a direct .mp4 link (up to 1080p, 4 h)."),
+                unsafe_allow_html=True)
+            go = st.button("Fetch video", type="primary", key="btn_fetch")
+            if not drive:
+                with st.expander("YouTube says “sign in / bot”? Add cookies"):
+                    st.markdown("<span class='hint'>Hosted servers are sometimes blocked by YouTube. Export "
+                                "<b>cookies.txt</b> (Netscape format) from your browser while logged in "
+                                "(extension “Get cookies.txt LOCALLY”) and upload it once.</span>",
+                                unsafe_allow_html=True)
+                    ck = st.file_uploader("cookies.txt", type=["txt"], key="ck_up", label_visibility="collapsed")
+                    if ck is not None:
+                        with open(os.path.join(WORK, "yt_cookies.txt"), "wb") as f:
+                            f.write(ck.getbuffer())
+                        st.markdown("<span class='stat ok'>cookies saved</span>", unsafe_allow_html=True)
+            if go:
+                if not url.strip():
+                    err = "Paste a link first."
+                else:
+                    bar = st.progress(0.0, text="Starting…")
+                    try:
+                        with dl_slot():
+                            path = fetch_video(url, "drive" if drive else "link", bar)
+                        st.session_state["paths"] = [path]
+                        st.session_state["primary"] = path
+                    except Exception as e:
+                        if type(e).__name__ in ("RerunException", "StopException"):
+                            raise
+                        bar.empty()
+                        err = str(e)[:220]
+                    else:
+                        st.rerun()
+        if err:
+            st.markdown("<span class='stat bad'>%s</span>" % err, unsafe_allow_html=True)
+    st.markdown('<div class="steps">'
+                '<div class="step"><b>1 · Upload</b><span>MP4, MOV, MKV, WebM or AVI up to 1 GB — or paste a '
+                'YouTube / Drive link for bigger files.</span></div>'
+                '<div class="step"><b>2 · Tune</b><span>Frame, captions, colours, audio and clip length.</span></div>'
+                '<div class="step"><b>3 · Generate</b><span>Auto-cut clips with word-by-word captions.</span></div>'
+                '</div>', unsafe_allow_html=True)
+    if uploads:
+        with st.spinner("Saving…"):
+            st.session_state["paths"] = [save_upload(u) for u in uploads]
+            st.session_state["primary"] = st.session_state["paths"][0]
+        st.rerun()
+
+
 def main():
     fonts = init_engine()
     st.session_state["fonts"] = fonts
+    if not st.session_state.get("_purged"):
+        st.session_state["_purged"] = True
+        purge_old()
+    try:
+        os.utime(sdir())                                  # mark this visitor as active
+    except OSError:
+        pass
     st.markdown(f"<style>{CSS}{font_css(fonts)}</style>", unsafe_allow_html=True)
     brand = ('<div class="brand"><div class="logo">AR</div><div><div class="bt">Auto Reels Studio</div>'
              '<div class="bs">%s</div></div></div>')
     paths = st.session_state.get("paths")
 
-    # ---------- start screen: big uploader (files are copied to disk, so the widget can go away) ----------
-    if not paths:
-        st.markdown(brand % "Upload, tune, preview, generate.", unsafe_allow_html=True)
-        st.markdown('<div class="hero"><h1>Turn long videos into captioned reels</h1>'
-                    '<p>Drop one or more videos below to begin.</p></div>', unsafe_allow_html=True)
-        with st.container(key="herobox"):
-            uploads = st.file_uploader("Upload video(s)", type=["mp4", "mov", "mkv", "webm", "avi"],
-                                       accept_multiple_files=True, label_visibility="collapsed",
-                                       key=f"up_{st.session_state.get('ukey', 0)}")
-        st.markdown('<div class="steps">'
-                    '<div class="step"><b>1 · Upload</b><span>MP4, MOV, MKV, WebM or AVI up to 2 GB each.</span></div>'
-                    '<div class="step"><b>2 · Tune</b><span>Frame, captions, colours, audio and clip length.</span></div>'
-                    '<div class="step"><b>3 · Generate</b><span>Auto-cut clips with word-by-word captions.</span></div>'
-                    '</div>', unsafe_allow_html=True)
-        if uploads:
-            with st.spinner("Saving…"):
-                st.session_state["paths"] = [save_upload(u) for u in uploads]
-                st.session_state["primary"] = st.session_state["paths"][0]
-            st.rerun()
+    if not paths:                                         # ---------- start screen ----------
+        landing(brand)
         return
 
-    # ---------- app bar ----------
+    # ---------- app bar (one line, so nothing overlaps the panels) ----------
     mi = media_info(paths[0])
     chips = (f'<span class="chip">{clean_stem(paths[0])[:32]}</span><span class="chip">{human(mi["size"])}</span>'
              f'<span class="chip">{mi["dur"] / 60:.1f} min</span>')
     if len(paths) > 1:
         chips += f'<span class="chip">+{len(paths) - 1} more</span>'
-    h1, h2, h3 = st.columns([9, 0.8, 1.1], vertical_alignment="center")
-    h1.markdown(brand % chips, unsafe_allow_html=True)
-    with h2.popover("Help"):
-        st.markdown(GUIDE, unsafe_allow_html=True)
-    h3.button("New video", on_click=new_video, help="Remove the current upload and results, then pick another video.")
+    with st.container(key="topbar"):
+        h1, h2, h3 = st.columns([9, 0.8, 1.1], vertical_alignment="center")
+        h1.markdown('<div class="brand1"><div class="logo">AR</div><div class="bt">Auto Reels Studio</div>'
+                    '<div class="sep"></div><div class="chips">%s</div></div>' % chips, unsafe_allow_html=True)
+        with h2.popover("Help"):
+            st.markdown(GUIDE, unsafe_allow_html=True)
+        h3.button("New video", on_click=new_video)
 
+    try:                                                  # measure the window -> panels end exactly above the bar
+        import streamlit.components.v1 as components
+        components.html(FIT_JS, height=0)
+    except Exception:
+        pass
     studio()
     action_bar()
 
